@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registro de vacaciones</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{--fg:#1f1e1c;--muted:#6b6862;--bg:#f6f5f1;--panel:#fff;--line:#e4e1da;--accent:#2f5d8a;--accent-soft:#dbe6f1;--vac:#3d7fbf;--half:#9cc1e6;--ap:#c27c2c;--otro:#8a6bb8;--fest:#e9e5dc;--ok:#2e7d4f;--warn:#a8650c;--bad:#b3261e}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  h1,h2,h3{margin:0} h1{font-family:Georgia,serif;font-weight:400;font-size:1.5rem} h2{font-size:1.1rem;margin-bottom:4px} h3{font-size:.95rem}
+  p{margin:0}
+  .muted{color:var(--muted)} .small{font-size:.82rem}
+  .wrap{max-width:1200px;margin:0 auto;padding:20px}
+  header.top{background:var(--panel);border-bottom:1px solid var(--line)}
+  header.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding-top:12px;padding-bottom:12px}
+  header.top .sp{flex:1}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px}
+  .stack{display:flex;flex-direction:column;gap:18px}
+  .grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:18px}
+  @media (max-width:860px){.grid2{grid-template-columns:1fr}}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .tile .lbl{font-size:.78rem;color:var(--muted)} .tile .big{font-family:Georgia,serif;font-size:1.8rem;display:block}
+  .good{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  nav.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}
+  nav.tabs button{all:unset;cursor:pointer;padding:8px 14px;border-radius:8px 8px 0 0;color:var(--muted);font-size:.9rem}
+  nav.tabs button.on{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-bottom-color:var(--panel);margin-bottom:-1px;font-weight:600}
+  label.f{display:flex;flex-direction:column;gap:3px;font-size:.8rem;color:var(--muted)}
+  input,select,textarea{font:inherit;font-size:.9rem;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--fg)}
+  .form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+  .form .wide{grid-column:1/-1}
+  .chk{display:flex;align-items:center;gap:6px;font-size:.88rem}
+  .btn{font:inherit;font-size:.88rem;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--fg);cursor:pointer}
+  .btn:hover{border-color:var(--accent)} .btn:disabled{opacity:.5;cursor:default}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.link{border:0;background:none;color:var(--accent);padding:4px 6px}
+  .btn.danger{color:var(--bad)} .btn.xs{font-size:.75rem;padding:3px 9px}
+  .preview{font-size:.88rem;padding:8px 10px;border-radius:7px;background:var(--accent-soft);color:#1e3d5c}
+  .preview.err{background:#fbe9e7;color:var(--bad)}
+  table{width:100%;border-collapse:collapse;font-size:.84rem;font-variant-numeric:tabular-nums}
+  th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{font-weight:600;white-space:nowrap;background:var(--panel)}
+  td.n,th.n{text-align:right;white-space:nowrap}
+  .tw{overflow:auto}
+  .tag{display:inline-block;padding:0 8px;border-radius:999px;font-size:.75rem;color:#fff;white-space:nowrap}
+  .t-Vacaciones{background:var(--vac)} .t-Asuntos{background:var(--ap)} .t-Otro{background:var(--otro)}
+  .months{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+  .month h3{font-size:.85rem;margin-bottom:4px;text-transform:capitalize}
+  .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:.72rem;text-align:center}
+  .mgrid div{padding:3px 0;border-radius:4px}
+  .mgrid .hd{color:var(--muted);font-weight:600}
+  .d-we{color:#aaa} .d-fest{background:var(--fest);color:#8a7f6a} .d-vac{background:var(--vac);color:#fff} .d-half{background:var(--half)} .d-ap{background:var(--ap);color:#fff} .d-otro{background:var(--otro);color:#fff} .d-hoy{outline:2px solid var(--fg)}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.78rem;color:var(--muted)}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+  table.team{font-size:.72rem} table.team th,table.team td{padding:3px 2px;text-align:center;border:1px solid #f0ede6;min-width:22px}
+  table.team th.name,table.team td.name{text-align:left;padding:3px 8px;white-space:nowrap;min-width:150px;position:sticky;left:0;background:#fff;z-index:1}
+  table.team td.c-vac{background:var(--vac)} table.team td.c-half{background:var(--half)} table.team td.c-ap{background:var(--ap)} table.team td.c-otro{background:var(--otro)} table.team td.c-we,table.team th.c-we{background:#f6f5f1} table.team td.c-fest,table.team th.c-fest{background:var(--fest)}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .login{max-width:400px;margin:8vh auto}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1f1e1c;color:#fff;padding:10px 16px;border-radius:8px;font-size:.88rem;display:none;z-index:50;max-width:90vw}
+  .toast.err{background:var(--bad)}
+  dialog{border:1px solid var(--line);border-radius:12px;padding:0;width:min(560px,calc(100% - 24px))}
+  dialog::backdrop{background:rgba(0,0,0,.35)}
+  dialog .in{padding:20px;display:flex;flex-direction:column;gap:14px}
+  .hidden{display:none!important}
+  #informe .rep-emp{break-inside:avoid;margin-top:14px}
+  @media print{
+    body{background:#fff;font-size:11px}
+    header.top,nav.tabs,.noprint,.toast{display:none!important}
+    .wrap{padding:0;max-width:none}
+    .card{border:0;padding:0}
+    section[data-tab]:not([data-tab="informe"]){display:none!important}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ CONFIGURACIÓN: pega aquí los datos de tu proyecto Supabase ============ -->
+<script>
+  const SUPABASE_URL = 'https://cgvdvsylzivkrjuslgbl.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_8vwbU3GKSzhPsTLZ3HwgCA_PbuTgZU9';
+  const EMPRESA = 'Garraposa SL';
+</script>
+<!-- =================================================================================== -->
+
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<dialog id="dlg"><form class="in" method="dialog" id="dlg-form"></form></dialog>
+
+<script>
+(() => {
+'use strict';
+// Avisos claros si algo falla al arrancar, en vez de una página en blanco
+const aviso = (titulo, texto) => { document.getElementById('app').innerHTML = '<div style="max-width:520px;margin:10vh auto;background:#fff;border:1px solid #e4e1da;border-radius:10px;padding:20px;font-family:sans-serif"><h2 style="margin:0 0 8px">' + titulo + '</h2><p style="margin:0;line-height:1.5">' + texto + '</p></div>'; };
+if (typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_KEY === 'undefined') { aviso('Error en la configuración', 'Revisa el bloque CONFIGURACIÓN del principio del archivo: cada valor tiene que ir entre comillas simples y terminar en punto y coma, así:<br><code>const SUPABASE_URL = \'https://xxxx.supabase.co\';</code><br><code>const SUPABASE_KEY = \'sb_publishable_xxxx\';</code>'); return; }
+if (typeof EMPRESA === 'undefined') window.EMPRESA = '';
+if (SUPABASE_URL.includes('TU-PROYECTO') || SUPABASE_KEY.includes('TU-CLAVE')) { aviso('Falta configurar', 'Abre este archivo con el Bloc de notas (clic derecho → Abrir con → Bloc de notas) y pega la URL y la clave pública de tu proyecto Supabase en el bloque CONFIGURACIÓN del principio.'); return; }
+if (!window.supabase) { aviso('No se ha podido cargar la conexión', 'La página necesita internet para conectarse. Comprueba la conexión y recarga (F5). Si estás en la red de la oficina, puede que esté bloqueando cdn.jsdelivr.net.'); return; }
+const sb = window.supabase.createClient(SUPABASE_URL.trim(), SUPABASE_KEY.trim());
+const app = document.getElementById('app');
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const TIPOS = ['Vacaciones','Asuntos propios','Otro'];
+
+// ---------- utilidades ----------
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k === 'text') e.textContent = v;
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k instanceof Node ? k : document.createTextNode(String(k)));
+  return e;
+};
+const toastEl = document.getElementById('toast');
+let toastT;
+const toast = (msg, err) => { toastEl.textContent = msg; toastEl.className = 'toast' + (err ? ' err' : ''); toastEl.style.display = 'block'; clearTimeout(toastT); toastT = setTimeout(() => toastEl.style.display = 'none', err ? 6000 : 3000); };
+const errMsg = e => {
+  const m = (e && (e.message || e.error_description)) || String(e);
+  if (/solapan/i.test(m)) return 'Ya hay vacaciones apuntadas que se solapan con esas fechas.';
+  if (/laborable/i.test(m)) return 'Esas fechas no incluyen ningún día laborable.';
+  if (/Invalid login/i.test(m)) return 'Correo o contraseña incorrectos.';
+  if (/already registered/i.test(m)) return 'Ese correo ya tiene cuenta: usa «Entrar».';
+  if (/Password should be/i.test(m)) return 'La contraseña debe tener al menos 6 caracteres.';
+  if (/Database error saving new user/i.test(m)) return 'Tu correo no está dado de alta. Pide a administración que te añada.';
+  if (/anio_valido/i.test(m)) return 'El año elegido no corresponde a esas fechas.';
+  return m;
+};
+const D = s => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const S = d => d.toISOString().slice(0, 10);
+const addDays = (s, n) => { const d = D(s); d.setUTCDate(d.getUTCDate() + n); return S(d); };
+const hoyS = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+const fF = s => { if (!s) return '—'; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
+const fN = n => Number(n).toLocaleString('es-ES', {maximumFractionDigits: 1});
+const esFinde = s => { const w = D(s).getUTCDay(); return w === 0 || w === 6; };
+const tipoCls = t => t === 'Vacaciones' ? 'vac' : t === 'Asuntos propios' ? 'ap' : 'otro';
+const tag = t => el('span', {class: 'tag t-' + t.split(' ')[0], text: t});
+
+// ---------- estado ----------
+const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15'};
+
+const laborables = (a, b) => { let n = 0; for (let s = a; s <= b; s = addDays(s, 1)) if (!esFinde(s) && !st.festivos.has(s)) n++; return n; };
+const diasDe = v => Number(v.dias);
+function partes(v) { // días disfrutados vs planificados según hoy
+  if (v.fecha_fin < hoyS) return [diasDe(v), 0];
+  if (v.fecha_inicio >= hoyS) return [0, diasDe(v)];
+  const hechos = v.medio_dia ? 0 : laborables(v.fecha_inicio, addDays(hoyS, -1));
+  return [hechos, diasDe(v) - hechos];
+}
+const deEsteAnio = lista => lista.filter(v => Number(v.anio) === st.year);
+const limiteDe = anio => `${anio + 1}-${st.limite}`;
+function resumen(lista, perfil) {
+  lista = deEsteAnio(lista);
+  const r = {anuales: Number(perfil.dias_anuales), disfrutados: 0, planificados: 0, ap: 0, otro: 0, periodos: 0};
+  lista.forEach(v => {
+    if (v.tipo === 'Vacaciones') { const [a, b] = partes(v); r.disfrutados += a; r.planificados += b; r.periodos++; }
+    else if (v.tipo === 'Asuntos propios') r.ap += diasDe(v); else r.otro += diasDe(v);
+  });
+  r.pendientes = r.anuales - r.disfrutados - r.planificados;
+  return r;
+}
+
+// ---------- datos ----------
+const rango = () => [`${st.year}-01-01`, `${st.year}-12-31`];
+async function cargarFestivos() {
+  const {data, error} = await sb.from('festivos').select('*').order('fecha');
+  if (error) throw error;
+  st.festivos = new Map(data.map(f => [f.fecha, f.nombre]));
+  const aj = await sb.from('ajustes').select('*');
+  if (!aj.error) { const l = aj.data.find(x => x.clave === 'limite_anio_anterior'); if (l) st.limite = l.valor; }
+}
+// vacaciones que cuentan para el año elegido o que caen dentro de él
+const filtroAnio = () => { const [a, b] = rango(); return `anio.eq.${st.year},and(fecha_fin.gte.${a},fecha_inicio.lte.${b})`; };
+async function cargarMias() {
+  const [a, b] = rango();
+  const {data, error} = await sb.from('vacaciones').select('*').eq('user_id', st.user.id).or(filtroAnio()).order('fecha_inicio');
+  if (error) throw error; st.mias = data;
+}
+async function cargarAdmin() {
+  const [a, b] = rango();
+  const [v, p, l] = await Promise.all([
+    sb.from('vacaciones').select('*').or(filtroAnio()).order('fecha_inicio'),
+    sb.from('profiles').select('*').order('nombre'),
+    sb.from('empleados_permitidos').select('*').order('nombre'),
+  ]);
+  for (const r of [v, p, l]) if (r.error) throw r.error;
+  st.todas = v.data; st.perfiles = p.data; st.permitidos = l.data;
+}
+async function recargar() {
+  try {
+    await cargarFestivos(); await cargarMias();
+    if (st.perfil.es_admin) await cargarAdmin();
+    pintar();
+  } catch (e) { toast(errMsg(e), true); }
+}
+
+// ---------- acceso ----------
+function pantallaLogin(modo = 'entrar') {
+  const email = el('input', {type: 'email', required: true, autocomplete: 'email', placeholder: 'tu@empresa.es'});
+  const pass = el('input', {type: 'password', required: true, minlength: 6, autocomplete: modo === 'entrar' ? 'current-password' : 'new-password'});
+  const pass2 = el('input', {type: 'password', minlength: 6, autocomplete: 'new-password'});
+  const msg = el('p', {class: 'small'});
+  const enviar = async ev => {
+    ev.preventDefault(); msg.textContent = ''; msg.className = 'small';
+    const correo = email.value.trim().toLowerCase();
+    try {
+      if (modo === 'entrar') {
+        const {error} = await sb.auth.signInWithPassword({email: correo, password: pass.value});
+        if (error) throw error;
+      } else {
+        if (pass.value !== pass2.value) throw new Error('Las contraseñas no coinciden.');
+        const {data: ok, error: e1} = await sb.rpc('email_permitido', {p_email: correo});
+        if (e1) throw e1;
+        if (!ok) throw new Error('Tu correo no está dado de alta. Pide a administración que te añada.');
+        const {data, error} = await sb.auth.signUp({email: correo, password: pass.value});
+        if (error) throw error;
+        if (!data.session) { msg.textContent = 'Cuenta creada. Revisa tu correo para confirmarla y luego entra.'; msg.className = 'small good'; return; }
+      }
+    } catch (e) { msg.textContent = errMsg(e); msg.className = 'small bad'; }
+  };
+  app.replaceChildren(el('div', {class: 'login card stack'},
+    el('div', {}, el('h1', {text: 'Registro de vacaciones'}), el('p', {class: 'muted small', text: EMPRESA})),
+    el('nav', {class: 'tabs'},
+      el('button', {type: 'button', class: modo === 'entrar' ? 'on' : '', text: 'Entrar', onclick: () => pantallaLogin('entrar')}),
+      el('button', {type: 'button', class: modo === 'alta' ? 'on' : '', text: 'Crear cuenta (primera vez)', onclick: () => pantallaLogin('alta')})),
+    el('form', {class: 'stack', onsubmit: enviar},
+      el('label', {class: 'f'}, 'Correo de la empresa', email),
+      el('label', {class: 'f'}, modo === 'entrar' ? 'Contraseña' : 'Elige una contraseña (mínimo 6 caracteres)', pass),
+      modo === 'alta' ? el('label', {class: 'f'}, 'Repite la contraseña', pass2) : null,
+      el('button', {class: 'btn primary', type: 'submit', text: modo === 'entrar' ? 'Entrar' : 'Crear cuenta'}),
+      msg,
+      modo === 'entrar' ? el('p', {class: 'small muted', text: '¿Has olvidado la contraseña? Pide a administración que te la restablezca.'}) : el('p', {class: 'small muted', text: 'Solo pueden registrarse las personas que administración haya dado de alta.'}))));
+  email.focus();
+}
+
+async function alEntrar(user) {
+  st.user = user;
+  const {data, error} = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (error || !data || !data.activo) {
+    app.replaceChildren(el('div', {class: 'login card stack'}, el('h2', {text: 'Sin acceso'}), el('p', {text: 'Tu usuario no está activo en el registro de vacaciones. Habla con administración.'}), el('button', {class: 'btn', text: 'Salir', onclick: () => sb.auth.signOut()})));
+    return;
+  }
+  st.perfil = data;
+  st.tab = data.es_admin ? 'resumen' : 'mias';
+  await recargar();
+}
+
+// ---------- marco ----------
+function pintar() {
+  const years = []; for (let y = 2026; y <= Number(hoyS.slice(0, 4)) + 1; y++) years.push(y);
+  const selY = el('select', {'aria-label': 'Año', onchange: e => { st.year = Number(e.target.value); recargar(); }}, years.map(y => el('option', {value: y, selected: y === st.year}, y)));
+  const head = el('header', {class: 'top'}, el('div', {class: 'wrap'},
+    el('h1', {text: 'Vacaciones'}), el('span', {class: 'muted small', text: EMPRESA}), el('span', {class: 'sp'}),
+    selY, el('span', {class: 'small', text: st.perfil.nombre + (st.perfil.es_admin ? ' · administración' : '')}),
+    el('button', {class: 'btn link small', text: 'Cambiar contraseña', onclick: cambiarPass}),
+    el('button', {class: 'btn small', text: 'Salir', onclick: () => sb.auth.signOut()})));
+  const main = el('main', {class: 'wrap'});
+  if (st.perfil.es_admin) {
+    const tabs = [['resumen', 'Resumen'], ['calendario', 'Calendario del equipo'], ['registros', 'Todas las vacaciones'], ['empleados', 'Empleados'], ['festivos', 'Festivos'], ['informe', 'Informe anual'], ['mias', 'Mis vacaciones']];
+    main.append(el('nav', {class: 'tabs'}, tabs.map(([k, l]) => el('button', {class: st.tab === k ? 'on' : '', text: l, onclick: () => { st.tab = k; pintar(); }}))));
+  }
+  const vistas = {mias: vistaMias, resumen: vistaResumen, calendario: vistaCalendario, registros: vistaRegistros, empleados: vistaEmpleados, festivos: vistaFestivos, informe: vistaInforme};
+  main.append(el('section', {'data-tab': st.tab}, vistas[st.tab]()));
+  app.replaceChildren(head, main);
+}
+
+// ---------- formulario de vacaciones (alta / edición) ----------
+function formVacaciones({v = null, paraOtro = false, alGuardar}) {
+  const ini = el('input', {type: 'date', required: true, value: v ? v.fecha_inicio : ''});
+  const fin = el('input', {type: 'date', required: true, value: v ? v.fecha_fin : ''});
+  const anio = el('select', {});
+  const medio = el('input', {type: 'checkbox', checked: v ? v.medio_dia : false});
+  const tipo = el('select', {}, TIPOS.map(t => el('option', {value: t, selected: v ? v.tipo === t : t === 'Vacaciones'}, t)));
+  const com = el('input', {type: 'text', value: v ? (v.comentario || '') : '', placeholder: 'Opcional'});
+  const emp = paraOtro ? el('select', {required: true}, el('option', {value: '', text: 'Elige empleado…'}), st.perfiles.filter(p => p.activo).map(p => el('option', {value: p.id, selected: v && v.user_id === p.id}, p.nombre))) : null;
+  const prev = el('p', {class: 'preview', text: 'Elige las fechas para ver cuántos días laborables son.'});
+  const btn = el('button', {class: 'btn primary', type: 'submit', text: v ? 'Guardar cambios' : 'Apuntar'});
+  let anioTocado = false;
+  const calc = () => {
+    if (ini.value && !fin.value) fin.value = ini.value;
+    if (ini.value && fin.value && fin.value < ini.value) fin.value = ini.value;
+    const unDia = ini.value && ini.value === fin.value;
+    medio.disabled = !unDia; if (!unDia) medio.checked = false;
+    let ok = false;
+    // años a los que puede contar: el del inicio, el anterior (si acaba antes del límite) o el del final (si cruza de año)
+    const elegido = anioTocado ? anio.value : (v ? String(v.anio) : '');
+    const ops = [];
+    if (ini.value && fin.value) {
+      const yi = Number(ini.value.slice(0, 4)), yf = Number(fin.value.slice(0, 4));
+      if (fin.value <= limiteDe(yi - 1)) ops.push(yi - 1);
+      for (let y = yi; y <= yf; y++) ops.push(y);
+    }
+    anio.replaceChildren(...ops.map(y => el('option', {value: y}, String(y))));
+    anio.disabled = ops.length < 2;
+    if (ops.includes(Number(elegido))) anio.value = elegido;
+    else if (ops.includes(st.year)) anio.value = String(st.year);
+    else if (ops.length) anio.value = String(ops[ops.includes(Number(ini.value.slice(0, 4))) ? ops.indexOf(Number(ini.value.slice(0, 4))) : 0]);
+    if (!ini.value || !fin.value) { prev.textContent = 'Elige las fechas para ver cuántos días laborables son.'; prev.className = 'preview'; }
+    else {
+      let n = laborables(ini.value, fin.value); if (medio.checked) n = Math.min(n, 0.5);
+      const fest = []; for (let s = ini.value; s <= fin.value; s = addDays(s, 1)) if (st.festivos.has(s) && !esFinde(s)) fest.push(`${fF(s)} ${st.festivos.get(s)}`);
+      if (n === 0) { prev.textContent = 'Esas fechas no incluyen ningún día laborable.'; prev.className = 'preview err'; }
+      else { prev.textContent = `Son ${fN(n)} ${n === 1 ? 'día laborable' : 'días laborables'}` + (fest.length ? ` (no cuentan los festivos: ${fest.join(', ')})` : '') + `. Se descuentan de las vacaciones de ${anio.value}.`; prev.className = 'preview'; ok = true; }
+    }
+    btn.disabled = !ok;
+  };
+  anio.addEventListener('change', () => { anioTocado = true; });
+  [ini, fin, medio, anio].forEach(i => i.addEventListener('change', calc));
+  const enviar = async ev => {
+    ev.preventDefault(); btn.disabled = true;
+    const datos = {fecha_inicio: ini.value, fecha_fin: fin.value, medio_dia: medio.checked, tipo: tipo.value, comentario: com.value.trim() || null, anio: Number(anio.value)};
+    if (paraOtro) datos.user_id = emp.value;
+    const q = v ? sb.from('vacaciones').update(datos).eq('id', v.id) : sb.from('vacaciones').insert(datos);
+    const {error} = await q;
+    if (error) { toast(errMsg(error), true); btn.disabled = false; return; }
+    toast(v ? 'Cambios guardados.' : 'Vacaciones apuntadas.');
+    alGuardar && alGuardar();
+  };
+  const f = el('form', {class: 'form', onsubmit: enviar},
+    paraOtro ? el('label', {class: 'f wide'}, 'Empleado', emp) : null,
+    el('label', {class: 'f'}, 'Desde', ini), el('label', {class: 'f'}, 'Hasta (incluido)', fin),
+    el('label', {class: 'f'}, 'Tipo', tipo), el('label', {class: 'chk', style: 'align-self:end'}, medio, 'Solo medio día'),
+    el('label', {class: 'f wide'}, 'Cuenta como vacaciones de', anio),
+    el('p', {class: 'wide small muted', text: `Los días que sobren de un año se pueden gastar hasta el ${st.limite.slice(3)}/${st.limite.slice(0, 2)} del año siguiente: al apuntarlos, elige el año anterior.`}),
+    el('label', {class: 'f wide'}, 'Comentario', com),
+    el('div', {class: 'wide'}, prev), el('div', {class: 'wide row'}, btn));
+  calc();
+  return f;
+}
+
+function editar(v, paraOtro) {
+  const form = document.getElementById('dlg-form'); const dlg = document.getElementById('dlg');
+  form.replaceChildren(el('h2', {text: 'Editar vacaciones'}), formVacaciones({v, paraOtro, alGuardar: () => { dlg.close(); recargar(); }}), el('div', {class: 'row'}, el('button', {class: 'btn', type: 'button', text: 'Cancelar', onclick: () => dlg.close()})));
+  dlg.showModal();
+}
+async function borrar(v) {
+  if (!confirm(`¿Borrar las vacaciones del ${fF(v.fecha_inicio)} al ${fF(v.fecha_fin)}?`)) return;
+  const {error} = await sb.from('vacaciones').delete().eq('id', v.id);
+  if (error) return toast(errMsg(error), true);
+  toast('Borrado.'); recargar();
+}
+
+// ---------- calendario anual ----------
+function calendarioAnual(lista) {
+  const marca = new Map();
+  lista.forEach(v => { for (let s = v.fecha_inicio; s <= v.fecha_fin; s = addDays(s, 1)) if (!esFinde(s) && !st.festivos.has(s)) marca.set(s, v.medio_dia ? 'half' : tipoCls(v.tipo)); });
+  const meses = el('div', {class: 'months'});
+  for (let m = 0; m < 12; m++) {
+    const g = el('div', {class: 'mgrid'}, ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => el('div', {class: 'hd', text: d})));
+    const primero = `${st.year}-${String(m + 1).padStart(2, '0')}-01`;
+    const off = (D(primero).getUTCDay() + 6) % 7; for (let i = 0; i < off; i++) g.append(el('div'));
+    for (let s = primero; s.slice(5, 7) === primero.slice(5, 7); s = addDays(s, 1)) {
+      let c = esFinde(s) ? 'd-we' : '';
+      if (st.festivos.has(s)) c = 'd-fest';
+      if (marca.has(s)) c = 'd-' + marca.get(s);
+      if (s === hoyS) c += ' d-hoy';
+      g.append(el('div', {class: c, title: st.festivos.get(s) || '', text: Number(s.slice(8))}));
+    }
+    meses.append(el('div', {class: 'month'}, el('h3', {text: MESES[m]}), g));
+  }
+  return el('div', {class: 'stack'}, leyenda(), meses);
+}
+const leyenda = () => el('div', {class: 'legend'},
+  el('span', {}, el('span', {class: 'sw', style: 'background:var(--vac)'}), 'Vacaciones'), el('span', {}, el('span', {class: 'sw', style: 'background:var(--half)'}), 'Medio día'),
+  el('span', {}, el('span', {class: 'sw', style: 'background:var(--ap)'}), 'Asuntos propios'), el('span', {}, el('span', {class: 'sw', style: 'background:var(--otro)'}), 'Otro'),
+  el('span', {}, el('span', {class: 'sw', style: 'background:var(--fest)'}), 'Festivo'));
+
+// ---------- vista empleado ----------
+function vistaMias() {
+  const r = resumen(st.mias, st.perfil);
+  const tiles = el('div', {class: 'tiles'},
+    tile('Días de vacaciones ' + st.year, fN(r.anuales)), tile('Disfrutados', fN(r.disfrutados)), tile('Planificados', fN(r.planificados)),
+    tile('Pendientes', fN(r.pendientes), r.pendientes < 0 ? 'bad' : r.pendientes === 0 ? '' : 'good'),
+    r.ap ? tile('Asuntos propios', fN(r.ap)) : null);
+  const filas = st.mias.map(v => el('tr', {}, el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {}, tag(v.tipo)), el('td', {class: Number(v.anio) !== st.year ? 'warn' : '', text: String(v.anio)}), el('td', {text: v.comentario || ''}),
+    el('td', {class: 'n noprint'}, el('button', {class: 'btn xs', text: 'Editar', onclick: () => editar(v, false)}), ' ', el('button', {class: 'btn xs danger', text: 'Borrar', onclick: () => borrar(v)}))));
+  return el('div', {class: 'stack'},
+    tiles,
+    el('div', {class: 'grid2'},
+      el('div', {class: 'card stack'}, el('h2', {text: 'Apuntar vacaciones'}), el('p', {class: 'small muted', text: 'Se cuentan solo días laborables: los fines de semana y festivos se descuentan solos.'}), formVacaciones({alGuardar: recargar})),
+      el('div', {class: 'card stack'}, el('h2', {text: `Mis vacaciones ${st.year}`}),
+        st.mias.length ? el('div', {class: 'tw'}, el('table', {}, el('thead', {}, el('tr', {}, el('th', {text: 'Desde'}), el('th', {text: 'Hasta'}), el('th', {class: 'n', text: 'Días'}), el('th', {text: 'Tipo'}), el('th', {text: 'Cuenta para'}), el('th', {text: 'Comentario'}), el('th'))), el('tbody', {}, filas)))
+          : el('p', {class: 'muted', text: 'Todavía no has apuntado nada este año.'}))),
+    el('div', {class: 'card stack'}, el('h2', {text: 'Calendario'}), calendarioAnual(st.mias)));
+}
+const tile = (l, v, c = '') => el('div', {class: 'card tile'}, el('div', {class: 'lbl', text: l}), el('span', {class: 'big ' + c, text: v}));
+
+// ---------- admin: resumen ----------
+const activos = () => st.perfiles.filter(p => p.activo);
+const vacDe = id => st.todas.filter(v => v.user_id === id);
+const nombreDe = id => (st.perfiles.find(p => p.id === id) || {}).nombre || '¿?';
+function filasResumen() { return activos().map(p => ({p, r: resumen(vacDe(p.id), p)})); }
+function vistaResumen() {
+  const rows = filasResumen();
+  const tot = rows.reduce((t, {r}) => ({anuales: t.anuales + r.anuales, disfrutados: t.disfrutados + r.disfrutados, planificados: t.planificados + r.planificados, pendientes: t.pendientes + r.pendientes}), {anuales: 0, disfrutados: 0, planificados: 0, pendientes: 0});
+  const sinApuntar = rows.filter(({r}) => r.disfrutados + r.planificados === 0).length;
+  const pendReg = st.permitidos.filter(e => !st.perfiles.some(p => p.email === e.email)).length;
+  return el('div', {class: 'stack'},
+    el('div', {class: 'tiles'}, tile('Personas', String(rows.length)), tile('Días disfrutados', fN(tot.disfrutados)), tile('Días planificados', fN(tot.planificados)), tile('Días pendientes', fN(tot.pendientes)),
+      tile('Sin nada apuntado', String(sinApuntar), sinApuntar ? 'warn' : ''), pendReg ? tile('Sin registrarse aún', String(pendReg), 'warn') : null),
+    el('div', {class: 'card stack'}, el('h2', {text: `Saldo por persona · ${st.year}`}),
+      el('p', {class: 'small muted', text: 'Disfrutados = días ya pasados; planificados = apuntados a partir de hoy. Solo el tipo «Vacaciones» descuenta del saldo.'}),
+      el('div', {class: 'tw'}, el('table', {},
+        el('thead', {}, el('tr', {}, ['Empleado', 'Días/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Asuntos propios', 'Otros', 'Periodos'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
+        el('tbody', {}, rows.map(({p, r}) => el('tr', {},
+          el('td', {}, el('button', {class: 'btn link', text: p.nombre, onclick: () => { st.filtroEmp = p.id; st.tab = 'registros'; pintar(); }})),
+          el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}),
+          el('td', {class: 'n ' + (r.pendientes < 0 ? 'bad' : r.pendientes > 0 ? '' : 'good'), text: fN(r.pendientes)}),
+          el('td', {class: 'n', text: r.ap ? fN(r.ap) : '—'}), el('td', {class: 'n', text: r.otro ? fN(r.otro) : '—'}), el('td', {class: 'n', text: r.periodos})))),
+        el('tfoot', {}, el('tr', {}, el('td', {text: 'Total'}), el('td', {class: 'n', text: fN(tot.anuales)}), el('td', {class: 'n', text: fN(tot.disfrutados)}), el('td', {class: 'n', text: fN(tot.planificados)}), el('td', {class: 'n', text: fN(tot.pendientes)}), el('td'), el('td'), el('td')))))));
+}
+
+// ---------- admin: calendario del equipo ----------
+function vistaCalendario() {
+  const m = st.mesCal; const mm = String(m + 1).padStart(2, '0');
+  const dias = []; for (let s = `${st.year}-${mm}-01`; s.slice(5, 7) === mm; s = addDays(s, 1)) dias.push(s);
+  const ini = dias[0], fin = dias[dias.length - 1];
+  const head = el('tr', {}, el('th', {class: 'name', text: 'Empleado'}), dias.map(s => el('th', {class: esFinde(s) ? 'c-we' : st.festivos.has(s) ? 'c-fest' : '', title: st.festivos.get(s) || '', text: `${'DLMXJVS'[D(s).getUTCDay()]}\n${Number(s.slice(8))}`, style: 'white-space:pre-line'})));
+  const filas = activos().map(p => {
+    const mapa = new Map();
+    vacDe(p.id).filter(v => v.fecha_fin >= ini && v.fecha_inicio <= fin).forEach(v => { for (let s = v.fecha_inicio; s <= v.fecha_fin; s = addDays(s, 1)) mapa.set(s, v); });
+    return el('tr', {}, el('td', {class: 'name', text: p.nombre}), dias.map(s => {
+      const v = mapa.get(s); const libre = esFinde(s) || st.festivos.has(s);
+      let c = esFinde(s) ? 'c-we' : st.festivos.has(s) ? 'c-fest' : '';
+      if (v && !libre) c = v.medio_dia ? 'c-half' : 'c-' + tipoCls(v.tipo);
+      return el('td', {class: c, title: v ? `${p.nombre}: ${v.tipo} ${fF(v.fecha_inicio)}–${fF(v.fecha_fin)}${v.comentario ? ' · ' + v.comentario : ''}` : (st.festivos.get(s) || '')});
+    }));
+  });
+  const fuera = dias.filter(s => !esFinde(s) && !st.festivos.has(s)).map(s => [s, activos().filter(p => vacDe(p.id).some(v => v.fecha_inicio <= s && v.fecha_fin >= s)).length]);
+  const pico = fuera.reduce((a, b) => b[1] > a[1] ? b : a, ['', 0]);
+  return el('div', {class: 'card stack'},
+    el('div', {class: 'row'}, el('button', {class: 'btn', text: '‹', onclick: () => { st.mesCal = (st.mesCal + 11) % 12; pintar(); }}),
+      el('h2', {style: 'margin:0;text-transform:capitalize;min-width:9rem;text-align:center', text: `${MESES[m]} ${st.year}`}),
+      el('button', {class: 'btn', text: '›', onclick: () => { st.mesCal = (st.mesCal + 1) % 12; pintar(); }}), el('span', {style: 'flex:1'}), leyenda()),
+    pico[1] ? el('p', {class: 'small muted', text: `Día con más gente fuera: ${fF(pico[0])} (${pico[1]} ${pico[1] === 1 ? 'persona' : 'personas'}).`}) : el('p', {class: 'small muted', text: 'Nadie tiene vacaciones este mes.'}),
+    el('div', {class: 'tw'}, el('table', {class: 'team'}, el('thead', {}, head), el('tbody', {}, filas))));
+}
+
+// ---------- admin: todas las vacaciones ----------
+function vistaRegistros() {
+  const sel = el('select', {onchange: e => { st.filtroEmp = e.target.value; pintar(); }}, el('option', {value: '', text: 'Todos los empleados'}), st.perfiles.map(p => el('option', {value: p.id, selected: st.filtroEmp === p.id}, p.nombre)));
+  const lista = st.todas.filter(v => !st.filtroEmp || v.user_id === st.filtroEmp);
+  return el('div', {class: 'grid2'},
+    el('div', {class: 'card stack'}, el('h2', {text: 'Apuntar para un empleado'}), el('p', {class: 'small muted', text: 'Por si alguien te pide que se lo apuntes tú.'}), formVacaciones({paraOtro: true, alGuardar: recargar})),
+    el('div', {class: 'card stack'}, el('div', {class: 'row'}, el('h2', {style: 'margin:0', text: `Vacaciones apuntadas · ${st.year}`}), el('span', {style: 'flex:1'}), sel),
+      lista.length ? el('div', {class: 'tw'}, el('table', {},
+        el('thead', {}, el('tr', {}, ['Empleado', 'Desde', 'Hasta', 'Días', 'Tipo', 'Cuenta para', 'Comentario', 'Apuntado', ''].map((h, i) => el('th', {class: i === 3 ? 'n' : '', text: h})))),
+        el('tbody', {}, lista.map(v => el('tr', {}, el('td', {text: nombreDe(v.user_id)}), el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {}, tag(v.tipo)), el('td', {class: Number(v.anio) !== st.year ? 'warn' : '', text: String(v.anio)}), el('td', {text: v.comentario || ''}), el('td', {class: 'small muted', text: fF(v.creado.slice(0, 10))}),
+          el('td', {class: 'n'}, el('button', {class: 'btn xs', text: 'Editar', onclick: () => editar(v, true)}), ' ', el('button', {class: 'btn xs danger', text: 'Borrar', onclick: () => borrar(v)}))))))) : el('p', {class: 'muted', text: 'No hay nada apuntado.'})));
+}
+
+// ---------- admin: empleados ----------
+function vistaEmpleados() {
+  const email = el('input', {type: 'email', required: true, placeholder: 'nombre@empresa.es'});
+  const nombre = el('input', {required: true, placeholder: 'Nombre y apellidos'});
+  const dias = el('input', {type: 'number', step: '0.5', min: '0', value: '22', required: true});
+  const adm = el('input', {type: 'checkbox'});
+  const alta = async ev => {
+    ev.preventDefault();
+    const {error} = await sb.from('empleados_permitidos').insert({email: email.value.trim().toLowerCase(), nombre: nombre.value.trim(), dias_anuales: Number(dias.value), es_admin: adm.checked});
+    if (error) return toast(/duplicate/i.test(error.message) ? 'Ese correo ya está dado de alta.' : errMsg(error), true);
+    toast('Empleado añadido. Ya puede crear su cuenta.'); recargar();
+  };
+  const editarEmp = e => {
+    const n = el('input', {value: e.nombre, required: true}); const d = el('input', {type: 'number', step: '0.5', min: '0', value: e.dias_anuales, required: true}); const a = el('input', {type: 'checkbox', checked: e.es_admin});
+    const form = document.getElementById('dlg-form'); const dlg = document.getElementById('dlg');
+    form.replaceChildren(el('h2', {text: e.email}), el('div', {class: 'form'}, el('label', {class: 'f wide'}, 'Nombre', n), el('label', {class: 'f'}, 'Días de vacaciones al año', d), el('label', {class: 'chk', style: 'align-self:end'}, a, 'Es administración (ve todo)')),
+      el('div', {class: 'row'}, el('button', {class: 'btn primary', type: 'button', text: 'Guardar', onclick: async () => {
+        const {error} = await sb.from('empleados_permitidos').update({nombre: n.value.trim(), dias_anuales: Number(d.value), es_admin: a.checked}).eq('email', e.email);
+        if (error) return toast(errMsg(error), true); dlg.close(); toast('Guardado.'); recargar();
+      }}), el('button', {class: 'btn', type: 'button', text: 'Cancelar', onclick: () => dlg.close()})));
+    dlg.showModal();
+  };
+  const baja = async e => {
+    if (e.email === st.perfil.email) return toast('No puedes darte de baja a ti misma.', true);
+    if (!confirm(`¿Dar de baja a ${e.nombre}? Ya no podrá entrar. Sus vacaciones apuntadas se conservan para el informe.`)) return;
+    const {error} = await sb.from('empleados_permitidos').delete().eq('email', e.email);
+    if (error) return toast(errMsg(error), true); toast('Dado de baja.'); recargar();
+  };
+  return el('div', {class: 'grid2'},
+    el('div', {class: 'card stack'}, el('h2', {text: 'Dar de alta a un empleado'}),
+      el('p', {class: 'small muted', text: 'Solo las personas de esta lista pueden crear su cuenta. Después entran en la web con su correo y eligen su contraseña.'}),
+      el('form', {class: 'form', onsubmit: alta}, el('label', {class: 'f wide'}, 'Correo', email), el('label', {class: 'f wide'}, 'Nombre', nombre), el('label', {class: 'f'}, 'Días de vacaciones al año', dias), el('label', {class: 'chk', style: 'align-self:end'}, adm, 'Es administración'), el('div', {class: 'wide'}, el('button', {class: 'btn primary', type: 'submit', text: 'Añadir'})))),
+    el('div', {class: 'card stack'}, el('h2', {text: 'Personal'}),
+      el('div', {class: 'tw'}, el('table', {},
+        el('thead', {}, el('tr', {}, ['Nombre', 'Correo', 'Días/año', 'Estado', ''].map((h, i) => el('th', {class: i === 2 ? 'n' : '', text: h})))),
+        el('tbody', {}, st.permitidos.map(e => {
+          const reg = st.perfiles.some(p => p.email === e.email);
+          return el('tr', {}, el('td', {text: e.nombre + (e.es_admin ? ' (admin)' : '')}), el('td', {class: 'small', text: e.email}), el('td', {class: 'n', text: fN(e.dias_anuales)}),
+            el('td', {class: 'small ' + (reg ? 'good' : 'warn'), text: reg ? 'Registrado' : 'Falta crear cuenta'}),
+            el('td', {class: 'n'}, el('button', {class: 'btn xs', text: 'Editar', onclick: () => editarEmp(e)}), ' ', el('button', {class: 'btn xs danger', text: 'Baja', onclick: () => baja(e)})));
+        }))))));
+}
+
+// ---------- admin: festivos ----------
+function vistaFestivos() {
+  const fecha = el('input', {type: 'date', required: true, min: `${st.year}-01-01`, max: `${st.year}-12-31`});
+  const nombre = el('input', {required: true, placeholder: 'Ej.: Nochebuena (convenio)'});
+  const tras = async () => { const {error} = await sb.rpc('recalcular_dias'); if (error) toast(errMsg(error), true); else toast('Festivos actualizados y días recalculados.'); recargar(); };
+  const alta = async ev => {
+    ev.preventDefault();
+    const {error} = await sb.from('festivos').upsert({fecha: fecha.value, nombre: nombre.value.trim()});
+    if (error) return toast(errMsg(error), true); tras();
+  };
+  const quitar = async f => { if (!confirm(`¿Quitar el festivo ${fF(f)}?`)) return; const {error} = await sb.from('festivos').delete().eq('fecha', f); if (error) return toast(errMsg(error), true); tras(); };
+  const lista = [...st.festivos].filter(([f]) => f.startsWith(String(st.year)));
+  const [lm, ld] = st.limite.split('-');
+  const limIn = el('input', {type: 'date', value: `${st.year}-${lm}-${ld}`});
+  const guardarLim = async () => {
+    if (!limIn.value) return;
+    const {error} = await sb.from('ajustes').upsert({clave: 'limite_anio_anterior', valor: limIn.value.slice(5)});
+    if (error) return toast(errMsg(error), true); toast('Fecha límite guardada.'); recargar();
+  };
+  return el('div', {class: 'grid2'},
+    el('div', {class: 'stack'},
+    el('div', {class: 'card stack'}, el('h2', {text: 'Días del año anterior'}),
+      el('p', {class: 'small muted', text: 'Hasta qué día de cada año se pueden gastar los días que sobraron del año anterior. Solo cuentan el día y el mes.'}),
+      el('div', {class: 'row'}, limIn, el('button', {class: 'btn', type: 'button', text: 'Guardar', onclick: guardarLim}))),
+    el('div', {class: 'card stack'}, el('h2', {text: 'Añadir festivo o día libre de empresa'}),
+      el('p', {class: 'small muted', text: 'Los días de esta lista no cuentan como vacaciones. Si el convenio da libres el 24 o el 31 de diciembre, añádelos aquí. Al cambiar algo se recalculan todas las vacaciones ya apuntadas.'}),
+      el('form', {class: 'form', onsubmit: alta}, el('label', {class: 'f'}, 'Fecha', fecha), el('label', {class: 'f'}, 'Nombre', nombre), el('div', {class: 'wide'}, el('button', {class: 'btn primary', type: 'submit', text: 'Añadir'}))))),
+    el('div', {class: 'card stack'}, el('h2', {text: `Festivos ${st.year}`}),
+      lista.length ? el('table', {}, el('tbody', {}, lista.map(([f, n]) => el('tr', {}, el('td', {text: fF(f)}), el('td', {class: 'small muted', text: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][D(f).getUTCDay()]}), el('td', {text: n}), el('td', {class: 'n'}, el('button', {class: 'btn xs danger', text: 'Quitar', onclick: () => quitar(f)}))))))
+        : el('p', {class: 'muted', text: 'No hay festivos para este año. Añádelos antes de que la gente empiece a apuntar.'})));
+}
+
+// ---------- admin: informe anual ----------
+function vistaInforme() {
+  const rows = filasResumen();
+  const csv = () => {
+    const L = [['Empleado', 'Correo', 'Desde', 'Hasta', 'Días laborables', 'Tipo', 'Comentario'].join(';')];
+    rows.forEach(({p}) => deEsteAnio(vacDe(p.id)).forEach(v => L.push([p.nombre, p.email, fF(v.fecha_inicio), fF(v.fecha_fin), String(v.dias).replace('.', ','), v.tipo, (v.comentario || '').replace(/[;\n]/g, ' ')].join(';'))));
+    L.push(''); L.push(['Resumen', '', '', '', '', '', ''].join(';')); L.push(['Empleado', 'Días/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Asuntos propios', 'Otros'].join(';'));
+    rows.forEach(({p, r}) => L.push([p.nombre, r.anuales, r.disfrutados, r.planificados, r.pendientes, r.ap, r.otro].map(x => String(x).replace('.', ',')).join(';')));
+    const blob = new Blob(['﻿' + L.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+    const a = el('a', {href: URL.createObjectURL(blob), download: `Vacaciones_${st.year}.csv`}); document.body.append(a); a.click(); a.remove();
+  };
+  const generado = new Date().toLocaleDateString('es-ES', {day: 'numeric', month: 'long', year: 'numeric'});
+  return el('div', {class: 'stack'},
+    el('div', {class: 'row noprint'}, el('button', {class: 'btn primary', text: 'Imprimir o guardar en PDF', onclick: () => window.print()}), el('button', {class: 'btn', text: 'Descargar para Excel (CSV)', onclick: csv}),
+      el('span', {class: 'small muted', text: 'Para el PDF, en la ventana de imprimir elige «Guardar como PDF».'})),
+    el('div', {class: 'card stack', id: 'informe'},
+      el('div', {}, el('h1', {text: `Informe de vacaciones ${st.year}`}), el('p', {class: 'muted', text: `${EMPRESA} · generado el ${generado}`})),
+      el('div', {class: 'tw'}, el('table', {},
+        el('thead', {}, el('tr', {}, ['Empleado', 'Días/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Asuntos propios', 'Otros'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
+        el('tbody', {}, rows.map(({p, r}) => el('tr', {}, el('td', {text: p.nombre}), el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}), el('td', {class: 'n' + (r.pendientes < 0 ? ' bad' : ''), text: fN(r.pendientes)}), el('td', {class: 'n', text: fN(r.ap)}), el('td', {class: 'n', text: fN(r.otro)})))))),
+      el('p', {class: 'small muted', text: 'Días laborables (sin fines de semana ni festivos). Disfrutados: hasta ayer; planificados: desde hoy.'}),
+      rows.map(({p, r}) => {
+        const l = deEsteAnio(vacDe(p.id));
+        return el('div', {class: 'rep-emp'}, el('h3', {text: `${p.nombre} · ${fN(r.disfrutados + r.planificados)} de ${fN(r.anuales)} días de vacaciones`}),
+          l.length ? el('table', {}, el('thead', {}, el('tr', {}, ['Desde', 'Hasta', 'Días', 'Tipo', 'Comentario'].map((h, i) => el('th', {class: i === 2 ? 'n' : '', text: h})))),
+            el('tbody', {}, l.map(v => el('tr', {}, el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {text: v.tipo + (v.medio_dia ? ' (medio día)' : '') + (v.fecha_inicio.slice(0, 4) > String(v.anio) ? ` · disfrutado en ${v.fecha_inicio.slice(0, 4)}` : '')}), el('td', {text: v.comentario || ''})))))
+            : el('p', {class: 'small muted', text: 'Sin vacaciones apuntadas.'}));
+      })));
+}
+
+// ---------- contraseña ----------
+function cambiarPass() {
+  const p1 = el('input', {type: 'password', minlength: 6, required: true, autocomplete: 'new-password'});
+  const p2 = el('input', {type: 'password', minlength: 6, required: true, autocomplete: 'new-password'});
+  const form = document.getElementById('dlg-form'); const dlg = document.getElementById('dlg');
+  form.replaceChildren(el('h2', {text: 'Cambiar contraseña'}), el('label', {class: 'f'}, 'Nueva contraseña', p1), el('label', {class: 'f'}, 'Repítela', p2),
+    el('div', {class: 'row'}, el('button', {class: 'btn primary', type: 'button', text: 'Guardar', onclick: async () => {
+      if (p1.value.length < 6) return toast('Mínimo 6 caracteres.', true);
+      if (p1.value !== p2.value) return toast('No coinciden.', true);
+      const {error} = await sb.auth.updateUser({password: p1.value});
+      if (error) return toast(errMsg(error), true); dlg.close(); toast('Contraseña cambiada.');
+    }}), el('button', {class: 'btn', type: 'button', text: 'Cancelar', onclick: () => dlg.close()})));
+  dlg.showModal();
+}
+
+// ---------- arranque ----------
+if (SUPABASE_URL.includes('TU-PROYECTO')) {
+  app.replaceChildren(el('div', {class: 'login card stack'}, el('h2', {text: 'Falta configurar'}), el('p', {text: 'Abre este archivo y pega la URL y la clave pública de tu proyecto Supabase en el bloque CONFIGURACIÓN del principio.'})));
+  return;
+}
+let actualId, iniciado = false;
+sb.auth.onAuthStateChange((ev, session) => {
+  const id = session ? session.user.id : null;
+  if (iniciado && id === actualId) return;
+  iniciado = true; actualId = id;
+  // fuera del callback para no bloquear el cliente de Supabase
+  setTimeout(() => { if (session) alEntrar(session.user); else { st.user = null; st.perfil = null; pantallaLogin(); } }, 0);
+});
+})();
+</script>
+</body>
+</html>
