@@ -64,6 +64,10 @@
   dialog::backdrop{background:rgba(0,0,0,.35)}
   dialog .in{padding:20px;display:flex;flex-direction:column;gap:14px}
   .hidden{display:none!important}
+  .nov{background:#fff4c2!important}
+  .badge{display:inline-block;background:#f5c400;color:#1f1e1c;border-radius:999px;padding:1px 9px;font-size:.78rem;font-weight:600;cursor:pointer;border:0}
+  .novbox{background:#fff8d6;border:1px solid #f0d77a;border-radius:10px;padding:14px 18px}
+  .tagnov{display:inline-block;background:#f5c400;color:#1f1e1c;border-radius:4px;padding:0 6px;font-size:.7rem;font-weight:600;margin-left:4px}
   #informe .rep-emp{break-inside:avoid;margin-top:14px}
   @media print{
     body{background:#fff;font-size:11px}
@@ -143,7 +147,7 @@ const tipoCls = t => t === 'Vacaciones' ? 'vac' : t === 'Libre disposición' ? '
 const tag = t => el('span', {class: 'tag t-' + t.split(' ')[0], text: t});
 
 // ---------- estado ----------
-const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15', cupos: [], infEmp: ''};
+const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15', cupos: [], infEmp: '', borradas: []};
 
 const laborables = (a, b) => { let n = 0; for (let s = a; s <= b; s = addDays(s, 1)) if (!esFinde(s) && !st.festivos.has(s)) n++; return n; };
 const diasDe = v => Number(v.dias);
@@ -205,9 +209,13 @@ async function cargarAdmin() {
   ]);
   for (const r of [v, p, l]) if (r.error) throw r.error;
   st.todas = v.data; st.perfiles = p.data; st.permitidos = l.data;
+  const bq = await sb.from('vacaciones_borradas').select('*').gt('borrado', st.perfil.visto_hasta || '1970-01-01').order('borrado', {ascending: false});
+  st.borradas = bq.error ? [] : bq.data.filter(b => b.borrado_por && b.borrado_por !== st.user.id);
 }
 async function recargar() {
   try {
+    const pf = await sb.from('profiles').select('*').eq('id', st.user.id).maybeSingle();
+    if (pf.data) st.perfil = pf.data;
     await cargarFestivos(); await cargarMias();
     if (st.perfil.es_admin) await cargarAdmin();
     pintar();
@@ -271,12 +279,13 @@ function pintar() {
   const selY = el('select', {'aria-label': 'Año', onchange: e => { st.year = Number(e.target.value); recargar(); }}, years.map(y => el('option', {value: y, selected: y === st.year}, y)));
   const head = el('header', {class: 'top'}, el('div', {class: 'wrap'},
     el('h1', {text: 'Vacaciones'}), el('span', {class: 'muted small', text: EMPRESA}), el('span', {class: 'sp'}),
-    selY, el('span', {class: 'small', text: st.perfil.nombre + (st.perfil.es_admin ? ' · administración' : '')}),
+    selY, st.perfil.es_admin && nNovedades() ? el('button', {class: 'badge', title: 'Ver novedades', text: `${nNovedades()} ${nNovedades() === 1 ? 'novedad' : 'novedades'}`, onclick: () => { st.tab = 'resumen'; pintar(); }}) : null,
+    el('span', {class: 'small', text: st.perfil.nombre + (st.perfil.es_admin ? ' · administración' : '')}),
     el('button', {class: 'btn link small', text: 'Cambiar contraseña', onclick: cambiarPass}),
     el('button', {class: 'btn small', text: 'Salir', onclick: () => sb.auth.signOut()})));
   const main = el('main', {class: 'wrap'});
   if (st.perfil.es_admin) {
-    const tabs = [['resumen', 'Resumen'], ['calendario', 'Calendario del equipo'], ['registros', 'Todas las vacaciones'], ['empleados', 'Empleados'], ['festivos', 'Festivos'], ['informe', 'Informe anual'], ['mias', 'Mis vacaciones']];
+    const tabs = [['resumen', 'Resumen'], ['calendario', 'Calendario del equipo'], ['registros', 'Todas las vacaciones' + (novedades().length ? ` (${novedades().length} nuevas)` : '')], ['empleados', 'Empleados'], ['festivos', 'Festivos'], ['informe', 'Informe anual'], ['mias', 'Mis vacaciones']];
     main.append(el('nav', {class: 'tabs'}, tabs.map(([k, l]) => el('button', {class: st.tab === k ? 'on' : '', text: l, onclick: () => { st.tab = k; pintar(); }}))));
   }
   const vistas = {mias: vistaMias, resumen: vistaResumen, calendario: vistaCalendario, registros: vistaRegistros, empleados: vistaEmpleados, festivos: vistaFestivos, informe: vistaInforme};
@@ -413,6 +422,28 @@ const activos = () => st.permitidos.map(e => {
 });
 const vacDe = email => st.todas.filter(v => v.email === email);
 const nombreDe = v => (st.permitidos.find(e => e.email === v.email) || st.perfiles.find(p => p.id === v.user_id) || {}).nombre || v.email || '¿?';
+// novedades: lo que han apuntado, cambiado o borrado los empleados desde la última revisión
+const esNovedad = v => !!(v.actualizado_por && v.actualizado_por !== st.user.id && (!st.perfil.visto_hasta || new Date(v.actualizado) > new Date(st.perfil.visto_hasta)));
+const novedades = () => st.todas.filter(esNovedad);
+const nNovedades = () => novedades().length + st.borradas.length;
+async function marcarVisto() {
+  const {error} = await sb.rpc('marcar_visto');
+  if (error) return toast(errMsg(error), true);
+  st.perfil.visto_hasta = new Date().toISOString();
+  toast('Novedades marcadas como vistas.'); recargar();
+}
+function cajaNovedades() {
+  const n = novedades(), b = st.borradas;
+  if (!n.length && !b.length) return null;
+  return el('div', {class: 'novbox stack'},
+    el('div', {class: 'row'}, el('h2', {style: 'margin:0', text: `${n.length + b.length} ${n.length + b.length === 1 ? 'novedad' : 'novedades'} desde tu última revisión`}), el('span', {style: 'flex:1'}),
+      el('button', {class: 'btn', text: 'Marcar como vistas', onclick: marcarVisto})),
+    el('table', {}, el('tbody', {},
+      n.map(v => el('tr', {}, el('td', {text: nombreDe(v)}), el('td', {text: (v.creado === v.actualizado || Math.abs(new Date(v.actualizado) - new Date(v.creado)) < 2000) ? 'Ha apuntado' : 'Ha cambiado'}),
+        el('td', {text: `${fF(v.fecha_inicio)} – ${fF(v.fecha_fin)}`}), el('td', {class: 'n', text: `${fN(v.dias)} ${Number(v.dias) === 1 ? 'día' : 'días'}`}), el('td', {class: 'small muted', text: new Date(v.actualizado).toLocaleString('es-ES', {dateStyle: 'short', timeStyle: 'short'})}))),
+      b.map(x => el('tr', {}, el('td', {text: nombreDe({email: x.email})}), el('td', {class: 'bad', text: 'Ha borrado'}),
+        el('td', {text: `${fF(x.fecha_inicio)} – ${fF(x.fecha_fin)}`}), el('td', {class: 'n', text: x.dias != null ? `${fN(x.dias)} ${Number(x.dias) === 1 ? 'día' : 'días'}` : ''}), el('td', {class: 'small muted', text: new Date(x.borrado).toLocaleString('es-ES', {dateStyle: 'short', timeStyle: 'short'})}))))));
+}
 const etiqueta = p => p.nombre + (p.registrado ? '' : ' (sin cuenta aún)');
 function filasResumen() { return activos().map(p => ({p, r: resumen(vacDe(p.email), p)})); }
 const hayLD = rows => rows.some(({r}) => r.ldTotal || r.ld);
@@ -423,6 +454,7 @@ function vistaResumen() {
   const sinApuntar = rows.filter(({r}) => r.disfrutados + r.planificados === 0).length;
   const pendReg = st.permitidos.filter(e => !st.perfiles.some(p => p.email === e.email)).length;
   return el('div', {class: 'stack'},
+    cajaNovedades(),
     el('div', {class: 'tiles'}, tile('Personas', String(rows.length)), tile('Días disfrutados', fN(tot.disfrutados)), tile('Días planificados', fN(tot.planificados)), tile('Días pendientes', fN(tot.pendientes)),
       tile('Sin nada apuntado', String(sinApuntar), sinApuntar ? 'warn' : ''), pendReg ? tile('Sin registrarse aún', String(pendReg), 'warn') : null),
     el('div', {class: 'card stack'}, el('h2', {text: `Saldo por persona · ${st.year}`}),
@@ -472,7 +504,7 @@ function vistaRegistros() {
     el('div', {class: 'card stack'}, el('div', {class: 'row'}, el('h2', {style: 'margin:0', text: `Vacaciones apuntadas · ${st.year}`}), el('span', {style: 'flex:1'}), sel),
       lista.length ? el('div', {class: 'tw'}, el('table', {},
         el('thead', {}, el('tr', {}, ['Empleado', 'Desde', 'Hasta', 'Días', 'Tipo', 'Cuenta para', 'Comentario', 'Apuntado', ''].map((h, i) => el('th', {class: i === 3 ? 'n' : '', text: h})))),
-        el('tbody', {}, lista.map(v => el('tr', {}, el('td', {text: nombreDe(v)}), el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {}, tag(v.tipo)), el('td', {class: Number(v.anio) !== st.year ? 'warn' : '', text: String(v.anio)}), el('td', {text: v.comentario || ''}), el('td', {class: 'small muted', text: fF(v.creado.slice(0, 10))}),
+        el('tbody', {}, lista.map(v => el('tr', {class: esNovedad(v) ? 'nov' : ''}, el('td', {}, nombreDe(v), esNovedad(v) ? el('span', {class: 'tagnov', text: 'NUEVO'}) : null), el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {}, tag(v.tipo)), el('td', {class: Number(v.anio) !== st.year ? 'warn' : '', text: String(v.anio)}), el('td', {text: v.comentario || ''}), el('td', {class: 'small muted', text: fF(v.creado.slice(0, 10))}),
           el('td', {class: 'n'}, el('button', {class: 'btn xs', text: 'Editar', onclick: () => editar(v, true)}), ' ', el('button', {class: 'btn xs danger', text: 'Borrar', onclick: () => borrar(v)}))))))) : el('p', {class: 'muted', text: 'No hay nada apuntado.'})));
 }
 
@@ -654,6 +686,11 @@ if (SUPABASE_URL.includes('TU-PROYECTO')) {
   app.replaceChildren(el('div', {class: 'login card stack'}, el('h2', {text: 'Falta configurar'}), el('p', {text: 'Abre este archivo y pega la URL y la clave pública de tu proyecto Supabase en el bloque CONFIGURACIÓN del principio.'})));
   return;
 }
+// actualización automática: al volver a la pestaña y cada 2 minutos (sin molestar si hay un formulario abierto)
+const ocupado = () => document.getElementById('dlg').open || [...document.querySelectorAll('input[type=date]')].some(i => i.value) && document.activeElement && document.activeElement.tagName === 'INPUT';
+const refrescar = () => { if (st.user && st.perfil && !ocupado()) recargar(); };
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refrescar(); });
+setInterval(refrescar, 120000);
 let actualId, iniciado = false;
 sb.auth.onAuthStateChange((ev, session) => {
   const id = session ? session.user.id : null;
