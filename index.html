@@ -44,7 +44,7 @@
   td.n,th.n{text-align:right;white-space:nowrap}
   .tw{overflow:auto}
   .tag{display:inline-block;padding:0 8px;border-radius:999px;font-size:.75rem;color:#fff;white-space:nowrap}
-  .t-Vacaciones{background:var(--vac)} .t-Asuntos{background:var(--ap)} .t-Otro{background:var(--otro)}
+  .t-Vacaciones{background:var(--vac)} .t-Libre{background:var(--ap)} .t-Otro{background:var(--otro)}
   .months{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
   .month h3{font-size:.85rem;margin-bottom:4px;text-transform:capitalize}
   .mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:.72rem;text-align:center}
@@ -100,7 +100,7 @@ if (!window.supabase) { aviso('No se ha podido cargar la conexión', 'La página
 const sb = window.supabase.createClient(SUPABASE_URL.trim(), SUPABASE_KEY.trim());
 const app = document.getElementById('app');
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-const TIPOS = ['Vacaciones','Asuntos propios','Otro'];
+const TIPOS = ['Vacaciones','Libre disposición','Otro'];
 
 // ---------- utilidades ----------
 const el = (tag, attrs = {}, ...kids) => {
@@ -136,11 +136,11 @@ const hoyS = (() => { const d = new Date(); return `${d.getFullYear()}-${String(
 const fF = s => { if (!s) return '—'; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
 const fN = n => Number(n).toLocaleString('es-ES', {maximumFractionDigits: 1});
 const esFinde = s => { const w = D(s).getUTCDay(); return w === 0 || w === 6; };
-const tipoCls = t => t === 'Vacaciones' ? 'vac' : t === 'Asuntos propios' ? 'ap' : 'otro';
+const tipoCls = t => t === 'Vacaciones' ? 'vac' : t === 'Libre disposición' ? 'ap' : 'otro';
 const tag = t => el('span', {class: 'tag t-' + t.split(' ')[0], text: t});
 
 // ---------- estado ----------
-const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15'};
+const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15', cupos: []};
 
 const laborables = (a, b) => { let n = 0; for (let s = a; s <= b; s = addDays(s, 1)) if (!esFinde(s) && !st.festivos.has(s)) n++; return n; };
 const diasDe = v => Number(v.dias);
@@ -152,14 +152,26 @@ function partes(v) { // días disfrutados vs planificados según hoy
 }
 const deEsteAnio = lista => lista.filter(v => Number(v.anio) === st.year);
 const limiteDe = anio => `${anio + 1}-${st.limite}`;
+// días que da la empresa ese año (si no está, los del último año apuntado)
+function cupoAnio(anio) {
+  const c = st.cupos.find(x => Number(x.anio) === anio) || [...st.cupos].filter(x => Number(x.anio) < anio).sort((a, b) => b.anio - a.anio)[0];
+  return c ? {vac: Number(c.vacaciones), ld: Number(c.libre_disposicion), definido: Number(c.anio) === anio} : {vac: 22, ld: 0, definido: false};
+}
+const num = x => x === null || x === undefined || x === '' ? null : Number(x);
+function diasPersona(perfil) {
+  const c = cupoAnio(st.year);
+  return {vac: num(perfil.dias_anuales) ?? c.vac, ld: num(perfil.libre_disposicion) ?? c.ld};
+}
 function resumen(lista, perfil) {
   lista = deEsteAnio(lista);
-  const r = {anuales: Number(perfil.dias_anuales), disfrutados: 0, planificados: 0, ap: 0, otro: 0, periodos: 0};
+  const d = diasPersona(perfil);
+  const r = {anuales: d.vac, ldTotal: d.ld, disfrutados: 0, planificados: 0, ld: 0, otro: 0, periodos: 0};
   lista.forEach(v => {
     if (v.tipo === 'Vacaciones') { const [a, b] = partes(v); r.disfrutados += a; r.planificados += b; r.periodos++; }
-    else if (v.tipo === 'Asuntos propios') r.ap += diasDe(v); else r.otro += diasDe(v);
+    else if (v.tipo === 'Libre disposición') r.ld += diasDe(v); else r.otro += diasDe(v);
   });
   r.pendientes = r.anuales - r.disfrutados - r.planificados;
+  r.ldPend = r.ldTotal - r.ld;
   return r;
 }
 
@@ -169,6 +181,8 @@ async function cargarFestivos() {
   const {data, error} = await sb.from('festivos').select('*').order('fecha');
   if (error) throw error;
   st.festivos = new Map(data.map(f => [f.fecha, f.nombre]));
+  const cu = await sb.from('cupos').select('*').order('anio');
+  if (!cu.error) st.cupos = cu.data;
   const aj = await sb.from('ajustes').select('*');
   if (!aj.error) { const l = aj.data.find(x => x.clave === 'limite_anio_anterior'); if (l) st.limite = l.valor; }
 }
@@ -316,7 +330,7 @@ function formVacaciones({v = null, paraOtro = false, alGuardar}) {
     const q = v ? sb.from('vacaciones').update(datos).eq('id', v.id) : sb.from('vacaciones').insert(datos);
     const {error} = await q;
     if (error) { toast(errMsg(error), true); btn.disabled = false; return; }
-    toast(v ? 'Cambios guardados.' : 'Vacaciones apuntadas.');
+    toast(v ? 'Cambios guardados.' : 'Apuntado.');
     alGuardar && alGuardar();
   };
   const f = el('form', {class: 'form', onsubmit: enviar},
@@ -365,7 +379,7 @@ function calendarioAnual(lista) {
 }
 const leyenda = () => el('div', {class: 'legend'},
   el('span', {}, el('span', {class: 'sw', style: 'background:var(--vac)'}), 'Vacaciones'), el('span', {}, el('span', {class: 'sw', style: 'background:var(--half)'}), 'Medio día'),
-  el('span', {}, el('span', {class: 'sw', style: 'background:var(--ap)'}), 'Asuntos propios'), el('span', {}, el('span', {class: 'sw', style: 'background:var(--otro)'}), 'Otro'),
+  el('span', {}, el('span', {class: 'sw', style: 'background:var(--ap)'}), 'Libre disposición'), el('span', {}, el('span', {class: 'sw', style: 'background:var(--otro)'}), 'Otro'),
   el('span', {}, el('span', {class: 'sw', style: 'background:var(--fest)'}), 'Festivo'));
 
 // ---------- vista empleado ----------
@@ -373,14 +387,14 @@ function vistaMias() {
   const r = resumen(st.mias, st.perfil);
   const tiles = el('div', {class: 'tiles'},
     tile('Días de vacaciones ' + st.year, fN(r.anuales)), tile('Disfrutados', fN(r.disfrutados)), tile('Planificados', fN(r.planificados)),
-    tile('Pendientes', fN(r.pendientes), r.pendientes < 0 ? 'bad' : r.pendientes === 0 ? '' : 'good'),
-    r.ap ? tile('Asuntos propios', fN(r.ap)) : null);
+    tile('Vacaciones pendientes', fN(r.pendientes), r.pendientes < 0 ? 'bad' : r.pendientes === 0 ? '' : 'good'),
+    r.ldTotal || r.ld ? tile('Libre disposición pendientes', `${fN(r.ldPend)} de ${fN(r.ldTotal)}`, r.ldPend < 0 ? 'bad' : r.ldPend === 0 ? '' : 'good') : null);
   const filas = st.mias.map(v => el('tr', {}, el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {}, tag(v.tipo)), el('td', {class: Number(v.anio) !== st.year ? 'warn' : '', text: String(v.anio)}), el('td', {text: v.comentario || ''}),
     el('td', {class: 'n noprint'}, el('button', {class: 'btn xs', text: 'Editar', onclick: () => editar(v, false)}), ' ', el('button', {class: 'btn xs danger', text: 'Borrar', onclick: () => borrar(v)}))));
   return el('div', {class: 'stack'},
     tiles,
     el('div', {class: 'grid2'},
-      el('div', {class: 'card stack'}, el('h2', {text: 'Apuntar vacaciones'}), el('p', {class: 'small muted', text: 'Se cuentan solo días laborables: los fines de semana y festivos se descuentan solos.'}), formVacaciones({alGuardar: recargar})),
+      el('div', {class: 'card stack'}, el('h2', {text: 'Apuntar vacaciones'}), el('p', {class: 'small muted', text: 'Se cuentan solo días laborables: los fines de semana y festivos se descuentan solos. Para un día de libre disposición, elige ese tipo.'}), formVacaciones({alGuardar: recargar})),
       el('div', {class: 'card stack'}, el('h2', {text: `Mis vacaciones ${st.year}`}),
         st.mias.length ? el('div', {class: 'tw'}, el('table', {}, el('thead', {}, el('tr', {}, el('th', {text: 'Desde'}), el('th', {text: 'Hasta'}), el('th', {class: 'n', text: 'Días'}), el('th', {text: 'Tipo'}), el('th', {text: 'Cuenta para'}), el('th', {text: 'Comentario'}), el('th'))), el('tbody', {}, filas)))
           : el('p', {class: 'muted', text: 'Todavía no has apuntado nada este año.'}))),
@@ -402,15 +416,15 @@ function vistaResumen() {
     el('div', {class: 'tiles'}, tile('Personas', String(rows.length)), tile('Días disfrutados', fN(tot.disfrutados)), tile('Días planificados', fN(tot.planificados)), tile('Días pendientes', fN(tot.pendientes)),
       tile('Sin nada apuntado', String(sinApuntar), sinApuntar ? 'warn' : ''), pendReg ? tile('Sin registrarse aún', String(pendReg), 'warn') : null),
     el('div', {class: 'card stack'}, el('h2', {text: `Saldo por persona · ${st.year}`}),
-      el('p', {class: 'small muted', text: 'Disfrutados = días ya pasados; planificados = apuntados a partir de hoy. Solo el tipo «Vacaciones» descuenta del saldo.'}),
+      el('p', {class: 'small muted', text: `Disfrutados = días ya pasados; planificados = apuntados a partir de hoy. La empresa da en ${st.year} ${fN(cupoAnio(st.year).vac)} días de vacaciones y ${fN(cupoAnio(st.year).ld)} de libre disposición${cupoAnio(st.year).definido ? '' : ' (no hay días definidos para este año: se usan los del año anterior; cámbialo en Festivos)'}.`}),
       el('div', {class: 'tw'}, el('table', {},
-        el('thead', {}, el('tr', {}, ['Empleado', 'Días/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Asuntos propios', 'Otros', 'Periodos'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
+        el('thead', {}, el('tr', {}, ['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Libre disp. usados', 'Libre disp. pendientes', 'Otros', 'Periodos'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
         el('tbody', {}, rows.map(({p, r}) => el('tr', {},
           el('td', {}, el('button', {class: 'btn link', text: p.nombre, onclick: () => { st.filtroEmp = p.id; st.tab = 'registros'; pintar(); }})),
           el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}),
           el('td', {class: 'n ' + (r.pendientes < 0 ? 'bad' : r.pendientes > 0 ? '' : 'good'), text: fN(r.pendientes)}),
-          el('td', {class: 'n', text: r.ap ? fN(r.ap) : '—'}), el('td', {class: 'n', text: r.otro ? fN(r.otro) : '—'}), el('td', {class: 'n', text: r.periodos})))),
-        el('tfoot', {}, el('tr', {}, el('td', {text: 'Total'}), el('td', {class: 'n', text: fN(tot.anuales)}), el('td', {class: 'n', text: fN(tot.disfrutados)}), el('td', {class: 'n', text: fN(tot.planificados)}), el('td', {class: 'n', text: fN(tot.pendientes)}), el('td'), el('td'), el('td')))))));
+          el('td', {class: 'n', text: `${fN(r.ld)} de ${fN(r.ldTotal)}`}), el('td', {class: 'n ' + (r.ldPend < 0 ? 'bad' : ''), text: fN(r.ldPend)}), el('td', {class: 'n', text: r.otro ? fN(r.otro) : '—'}), el('td', {class: 'n', text: r.periodos})))),
+        el('tfoot', {}, el('tr', {}, el('td', {text: 'Total'}), el('td', {class: 'n', text: fN(tot.anuales)}), el('td', {class: 'n', text: fN(tot.disfrutados)}), el('td', {class: 'n', text: fN(tot.planificados)}), el('td', {class: 'n', text: fN(tot.pendientes)}), el('td'), el('td'), el('td'), el('td')))))));
 }
 
 // ---------- admin: calendario del equipo ----------
@@ -456,20 +470,22 @@ function vistaRegistros() {
 function vistaEmpleados() {
   const email = el('input', {type: 'email', required: true, placeholder: 'nombre@empresa.es'});
   const nombre = el('input', {required: true, placeholder: 'Nombre y apellidos'});
-  const dias = el('input', {type: 'number', step: '0.5', min: '0', value: '22', required: true});
+  const c = cupoAnio(st.year);
+  const dias = el('input', {type: 'number', step: '0.5', min: '0', placeholder: `Los de la empresa (${fN(c.vac)})`});
+  const ldIn = el('input', {type: 'number', step: '0.5', min: '0', placeholder: `Los de la empresa (${fN(c.ld)})`});
   const adm = el('input', {type: 'checkbox'});
   const alta = async ev => {
     ev.preventDefault();
-    const {error} = await sb.from('empleados_permitidos').insert({email: email.value.trim().toLowerCase(), nombre: nombre.value.trim(), dias_anuales: Number(dias.value), es_admin: adm.checked});
+    const {error} = await sb.from('empleados_permitidos').insert({email: email.value.trim().toLowerCase(), nombre: nombre.value.trim(), dias_anuales: num(dias.value), libre_disposicion: num(ldIn.value), es_admin: adm.checked});
     if (error) return toast(/duplicate/i.test(error.message) ? 'Ese correo ya está dado de alta.' : errMsg(error), true);
     toast('Empleado añadido. Ya puede crear su cuenta.'); recargar();
   };
   const editarEmp = e => {
-    const n = el('input', {value: e.nombre, required: true}); const d = el('input', {type: 'number', step: '0.5', min: '0', value: e.dias_anuales, required: true}); const a = el('input', {type: 'checkbox', checked: e.es_admin});
+    const n = el('input', {value: e.nombre, required: true}); const d = el('input', {type: 'number', step: '0.5', min: '0', value: e.dias_anuales ?? '', placeholder: `Los de la empresa (${fN(c.vac)})`}); const ld = el('input', {type: 'number', step: '0.5', min: '0', value: e.libre_disposicion ?? '', placeholder: `Los de la empresa (${fN(c.ld)})`}); const a = el('input', {type: 'checkbox', checked: e.es_admin});
     const form = document.getElementById('dlg-form'); const dlg = document.getElementById('dlg');
-    form.replaceChildren(el('h2', {text: e.email}), el('div', {class: 'form'}, el('label', {class: 'f wide'}, 'Nombre', n), el('label', {class: 'f'}, 'Días de vacaciones al año', d), el('label', {class: 'chk', style: 'align-self:end'}, a, 'Es administración (ve todo)')),
+    form.replaceChildren(el('h2', {text: e.email}), el('div', {class: 'form'}, el('label', {class: 'f wide'}, 'Nombre', n), el('label', {class: 'f'}, 'Vacaciones (solo si son distintos)', d), el('label', {class: 'f'}, 'Libre disposición (solo si son distintos)', ld), el('label', {class: 'chk wide'}, a, 'Es administración (ve todo)'), el('p', {class: 'small muted wide', text: 'Deja los días vacíos para que tenga los de la empresa de cada año.'})),
       el('div', {class: 'row'}, el('button', {class: 'btn primary', type: 'button', text: 'Guardar', onclick: async () => {
-        const {error} = await sb.from('empleados_permitidos').update({nombre: n.value.trim(), dias_anuales: Number(d.value), es_admin: a.checked}).eq('email', e.email);
+        const {error} = await sb.from('empleados_permitidos').update({nombre: n.value.trim(), dias_anuales: num(d.value), libre_disposicion: num(ld.value), es_admin: a.checked}).eq('email', e.email);
         if (error) return toast(errMsg(error), true); dlg.close(); toast('Guardado.'); recargar();
       }}), el('button', {class: 'btn', type: 'button', text: 'Cancelar', onclick: () => dlg.close()})));
     dlg.showModal();
@@ -483,13 +499,13 @@ function vistaEmpleados() {
   return el('div', {class: 'grid2'},
     el('div', {class: 'card stack'}, el('h2', {text: 'Dar de alta a un empleado'}),
       el('p', {class: 'small muted', text: 'Solo las personas de esta lista pueden crear su cuenta. Después entran en la web con su correo y eligen su contraseña.'}),
-      el('form', {class: 'form', onsubmit: alta}, el('label', {class: 'f wide'}, 'Correo', email), el('label', {class: 'f wide'}, 'Nombre', nombre), el('label', {class: 'f'}, 'Días de vacaciones al año', dias), el('label', {class: 'chk', style: 'align-self:end'}, adm, 'Es administración'), el('div', {class: 'wide'}, el('button', {class: 'btn primary', type: 'submit', text: 'Añadir'})))),
+      el('form', {class: 'form', onsubmit: alta}, el('label', {class: 'f wide'}, 'Correo', email), el('label', {class: 'f wide'}, 'Nombre', nombre), el('label', {class: 'f'}, 'Vacaciones (solo si son distintos)', dias), el('label', {class: 'f'}, 'Libre disposición (solo si son distintos)', ldIn), el('label', {class: 'chk wide'}, adm, 'Es administración'), el('div', {class: 'wide'}, el('button', {class: 'btn primary', type: 'submit', text: 'Añadir'})))),
     el('div', {class: 'card stack'}, el('h2', {text: 'Personal'}),
       el('div', {class: 'tw'}, el('table', {},
-        el('thead', {}, el('tr', {}, ['Nombre', 'Correo', 'Días/año', 'Estado', ''].map((h, i) => el('th', {class: i === 2 ? 'n' : '', text: h})))),
+        el('thead', {}, el('tr', {}, ['Nombre', 'Correo', 'Vacaciones', 'Libre disp.', 'Estado', ''].map((h, i) => el('th', {class: i === 2 || i === 3 ? 'n' : '', text: h})))),
         el('tbody', {}, st.permitidos.map(e => {
           const reg = st.perfiles.some(p => p.email === e.email);
-          return el('tr', {}, el('td', {text: e.nombre + (e.es_admin ? ' (admin)' : '')}), el('td', {class: 'small', text: e.email}), el('td', {class: 'n', text: fN(e.dias_anuales)}),
+          return el('tr', {}, el('td', {text: e.nombre + (e.es_admin ? ' (admin)' : '')}), el('td', {class: 'small', text: e.email}), el('td', {class: 'n' + (num(e.dias_anuales) === null ? ' muted' : ''), text: num(e.dias_anuales) === null ? `${fN(c.vac)} (empresa)` : fN(e.dias_anuales)}), el('td', {class: 'n' + (num(e.libre_disposicion) === null ? ' muted' : ''), text: num(e.libre_disposicion) === null ? `${fN(c.ld)} (empresa)` : fN(e.libre_disposicion)}),
             el('td', {class: 'small ' + (reg ? 'good' : 'warn'), text: reg ? 'Registrado' : 'Falta crear cuenta'}),
             el('td', {class: 'n'}, el('button', {class: 'btn xs', text: 'Editar', onclick: () => editarEmp(e)}), ' ', el('button', {class: 'btn xs danger', text: 'Baja', onclick: () => baja(e)})));
         }))))));
@@ -514,8 +530,27 @@ function vistaFestivos() {
     const {error} = await sb.from('ajustes').upsert({clave: 'limite_anio_anterior', valor: limIn.value.slice(5)});
     if (error) return toast(errMsg(error), true); toast('Fecha límite guardada.'); recargar();
   };
+  const filasCupo = [...st.cupos].sort((a, b) => a.anio - b.anio).map(cu => {
+    const v = el('input', {type: 'number', step: '0.5', min: '0', value: cu.vacaciones, style: 'width:6rem'});
+    const l = el('input', {type: 'number', step: '0.5', min: '0', value: cu.libre_disposicion, style: 'width:6rem'});
+    return el('tr', {}, el('td', {text: cu.anio}), el('td', {}, v), el('td', {}, l), el('td', {class: 'n'}, el('button', {class: 'btn xs', type: 'button', text: 'Guardar', onclick: async () => {
+      const {error} = await sb.from('cupos').upsert({anio: cu.anio, vacaciones: Number(v.value), libre_disposicion: Number(l.value)});
+      if (error) return toast(errMsg(error), true); toast(`Días de ${cu.anio} guardados.`); recargar();
+    }})));
+  });
+  const nAnio = el('input', {type: 'number', min: '2026', step: '1', value: Math.max(st.year, ...st.cupos.map(x => Number(x.anio))) + 1, style: 'width:6rem'});
+  const nVac = el('input', {type: 'number', step: '0.5', min: '0', value: cupoAnio(st.year).vac, style: 'width:6rem'});
+  const nLd = el('input', {type: 'number', step: '0.5', min: '0', value: cupoAnio(st.year).ld, style: 'width:6rem'});
+  const addCupo = async () => {
+    const {error} = await sb.from('cupos').upsert({anio: Number(nAnio.value), vacaciones: Number(nVac.value), libre_disposicion: Number(nLd.value)});
+    if (error) return toast(errMsg(error), true); toast('Año añadido.'); recargar();
+  };
   return el('div', {class: 'grid2'},
     el('div', {class: 'stack'},
+    el('div', {class: 'card stack'}, el('h2', {text: 'Días por año'}),
+      el('p', {class: 'small muted', text: 'Días que da la empresa a todo el personal cada año. A quien tenga otros días se los cambias en Empleados.'}),
+      el('table', {}, el('thead', {}, el('tr', {}, el('th', {text: 'Año'}), el('th', {text: 'Vacaciones'}), el('th', {text: 'Libre disposición'}), el('th'))),
+        el('tbody', {}, filasCupo, el('tr', {}, el('td', {}, nAnio), el('td', {}, nVac), el('td', {}, nLd), el('td', {class: 'n'}, el('button', {class: 'btn xs', type: 'button', text: 'Añadir año', onclick: addCupo})))))),
     el('div', {class: 'card stack'}, el('h2', {text: 'Días del año anterior'}),
       el('p', {class: 'small muted', text: 'Hasta qué día de cada año se pueden gastar los días que sobraron del año anterior. Solo cuentan el día y el mes.'}),
       el('div', {class: 'row'}, limIn, el('button', {class: 'btn', type: 'button', text: 'Guardar', onclick: guardarLim}))),
@@ -533,8 +568,8 @@ function vistaInforme() {
   const csv = () => {
     const L = [['Empleado', 'Correo', 'Desde', 'Hasta', 'Días laborables', 'Tipo', 'Comentario'].join(';')];
     rows.forEach(({p}) => deEsteAnio(vacDe(p.id)).forEach(v => L.push([p.nombre, p.email, fF(v.fecha_inicio), fF(v.fecha_fin), String(v.dias).replace('.', ','), v.tipo, (v.comentario || '').replace(/[;\n]/g, ' ')].join(';'))));
-    L.push(''); L.push(['Resumen', '', '', '', '', '', ''].join(';')); L.push(['Empleado', 'Días/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Asuntos propios', 'Otros'].join(';'));
-    rows.forEach(({p, r}) => L.push([p.nombre, r.anuales, r.disfrutados, r.planificados, r.pendientes, r.ap, r.otro].map(x => String(x).replace('.', ',')).join(';')));
+    L.push(''); L.push(['Resumen'].join(';')); L.push(['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Libre disposición', 'Libre disp. usados', 'Libre disp. pendientes', 'Otros'].join(';'));
+    rows.forEach(({p, r}) => L.push([p.nombre, r.anuales, r.disfrutados, r.planificados, r.pendientes, r.ldTotal, r.ld, r.ldPend, r.otro].map(x => String(x).replace('.', ',')).join(';')));
     const blob = new Blob(['﻿' + L.join('\r\n')], {type: 'text/csv;charset=utf-8'});
     const a = el('a', {href: URL.createObjectURL(blob), download: `Vacaciones_${st.year}.csv`}); document.body.append(a); a.click(); a.remove();
   };
@@ -545,12 +580,12 @@ function vistaInforme() {
     el('div', {class: 'card stack', id: 'informe'},
       el('div', {}, el('h1', {text: `Informe de vacaciones ${st.year}`}), el('p', {class: 'muted', text: `${EMPRESA} · generado el ${generado}`})),
       el('div', {class: 'tw'}, el('table', {},
-        el('thead', {}, el('tr', {}, ['Empleado', 'Días/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Asuntos propios', 'Otros'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
-        el('tbody', {}, rows.map(({p, r}) => el('tr', {}, el('td', {text: p.nombre}), el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}), el('td', {class: 'n' + (r.pendientes < 0 ? ' bad' : ''), text: fN(r.pendientes)}), el('td', {class: 'n', text: fN(r.ap)}), el('td', {class: 'n', text: fN(r.otro)})))))),
+        el('thead', {}, el('tr', {}, ['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Libre disp. usados', 'Libre disp. pendientes', 'Otros'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
+        el('tbody', {}, rows.map(({p, r}) => el('tr', {}, el('td', {text: p.nombre}), el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}), el('td', {class: 'n' + (r.pendientes < 0 ? ' bad' : ''), text: fN(r.pendientes)}), el('td', {class: 'n', text: `${fN(r.ld)} de ${fN(r.ldTotal)}`}), el('td', {class: 'n' + (r.ldPend < 0 ? ' bad' : ''), text: fN(r.ldPend)}), el('td', {class: 'n', text: fN(r.otro)})))))),
       el('p', {class: 'small muted', text: 'Días laborables (sin fines de semana ni festivos). Disfrutados: hasta ayer; planificados: desde hoy.'}),
       rows.map(({p, r}) => {
         const l = deEsteAnio(vacDe(p.id));
-        return el('div', {class: 'rep-emp'}, el('h3', {text: `${p.nombre} · ${fN(r.disfrutados + r.planificados)} de ${fN(r.anuales)} días de vacaciones`}),
+        return el('div', {class: 'rep-emp'}, el('h3', {text: `${p.nombre} · ${fN(r.disfrutados + r.planificados)} de ${fN(r.anuales)} días de vacaciones · ${fN(r.ld)} de ${fN(r.ldTotal)} de libre disposición`}),
           l.length ? el('table', {}, el('thead', {}, el('tr', {}, ['Desde', 'Hasta', 'Días', 'Tipo', 'Comentario'].map((h, i) => el('th', {class: i === 2 ? 'n' : '', text: h})))),
             el('tbody', {}, l.map(v => el('tr', {}, el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {text: v.tipo + (v.medio_dia ? ' (medio día)' : '') + (v.fecha_inicio.slice(0, 4) > String(v.anio) ? ` · disfrutado en ${v.fecha_inicio.slice(0, 4)}` : '')}), el('td', {text: v.comentario || ''})))))
             : el('p', {class: 'small muted', text: 'Sin vacaciones apuntadas.'}));
