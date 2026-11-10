@@ -71,6 +71,9 @@
     .wrap{padding:0;max-width:none}
     .card{border:0;padding:0}
     section[data-tab]:not([data-tab="informe"]){display:none!important}
+    .months{grid-template-columns:repeat(4,1fr)!important;gap:8px}
+    .rep-ind .tiles{grid-template-columns:repeat(4,1fr)}
+    .rep-ind .card.tile{border:1px solid #ccc!important;padding:8px!important}
   }
 </style>
 </head>
@@ -140,7 +143,7 @@ const tipoCls = t => t === 'Vacaciones' ? 'vac' : t === 'Libre disposición' ? '
 const tag = t => el('span', {class: 'tag t-' + t.split(' ')[0], text: t});
 
 // ---------- estado ----------
-const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15', cupos: []};
+const st = {user: null, perfil: null, year: Number(hoyS.slice(0, 4)), tab: 'mias', festivos: new Map(), mias: [], todas: [], perfiles: [], permitidos: [], mesCal: Number(hoyS.slice(5, 7)) - 1, filtroEmp: '', limite: '01-15', cupos: [], infEmp: ''};
 
 const laborables = (a, b) => { let n = 0; for (let s = a; s <= b; s = addDays(s, 1)) if (!esFinde(s) && !st.festivos.has(s)) n++; return n; };
 const diasDe = v => Number(v.dias);
@@ -412,8 +415,10 @@ const vacDe = email => st.todas.filter(v => v.email === email);
 const nombreDe = v => (st.permitidos.find(e => e.email === v.email) || st.perfiles.find(p => p.id === v.user_id) || {}).nombre || v.email || '¿?';
 const etiqueta = p => p.nombre + (p.registrado ? '' : ' (sin cuenta aún)');
 function filasResumen() { return activos().map(p => ({p, r: resumen(vacDe(p.email), p)})); }
+const hayLD = rows => rows.some(({r}) => r.ldTotal || r.ld);
 function vistaResumen() {
   const rows = filasResumen();
+  const ld = hayLD(rows);
   const tot = rows.reduce((t, {r}) => ({anuales: t.anuales + r.anuales, disfrutados: t.disfrutados + r.disfrutados, planificados: t.planificados + r.planificados, pendientes: t.pendientes + r.pendientes}), {anuales: 0, disfrutados: 0, planificados: 0, pendientes: 0});
   const sinApuntar = rows.filter(({r}) => r.disfrutados + r.planificados === 0).length;
   const pendReg = st.permitidos.filter(e => !st.perfiles.some(p => p.email === e.email)).length;
@@ -421,15 +426,15 @@ function vistaResumen() {
     el('div', {class: 'tiles'}, tile('Personas', String(rows.length)), tile('Días disfrutados', fN(tot.disfrutados)), tile('Días planificados', fN(tot.planificados)), tile('Días pendientes', fN(tot.pendientes)),
       tile('Sin nada apuntado', String(sinApuntar), sinApuntar ? 'warn' : ''), pendReg ? tile('Sin registrarse aún', String(pendReg), 'warn') : null),
     el('div', {class: 'card stack'}, el('h2', {text: `Saldo por persona · ${st.year}`}),
-      el('p', {class: 'small muted', text: `Disfrutados = días ya pasados; planificados = apuntados a partir de hoy. La empresa da en ${st.year} ${fN(cupoAnio(st.year).vac)} días de vacaciones y ${fN(cupoAnio(st.year).ld)} de libre disposición${cupoAnio(st.year).definido ? '' : ' (no hay días definidos para este año: se usan los del año anterior; cámbialo en Festivos)'}.`}),
+      el('p', {class: 'small muted', text: `Disfrutados = días ya pasados; planificados = apuntados a partir de hoy. La empresa da en ${st.year} ${fN(cupoAnio(st.year).vac)} días de vacaciones${cupoAnio(st.year).ld ? ` y ${fN(cupoAnio(st.year).ld)} de libre disposición` : ''}${cupoAnio(st.year).definido ? '' : ' (no hay días definidos para este año: se usan los del año anterior; cámbialo en Festivos)'}.`}),
       el('div', {class: 'tw'}, el('table', {},
-        el('thead', {}, el('tr', {}, ['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Libre disp. usados', 'Libre disp. pendientes', 'Otros', 'Periodos'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
+        el('thead', {}, el('tr', {}, ['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', ld && 'Libre disp. usados', ld && 'Libre disp. pendientes', 'Otros', 'Periodos'].filter(Boolean).map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
         el('tbody', {}, rows.map(({p, r}) => el('tr', {},
-          el('td', {}, el('button', {class: 'btn link', text: p.nombre, onclick: () => { st.filtroEmp = p.email; st.tab = 'registros'; pintar(); }}), p.registrado ? null : el('span', {class: 'small warn', text: ' sin cuenta aún'})),
+          el('td', {}, el('button', {class: 'btn link', text: p.nombre, onclick: () => { st.filtroEmp = p.email; st.tab = 'registros'; pintar(); }}), p.registrado ? null : el('span', {class: 'small warn', text: ' sin cuenta aún'}), ' ', el('button', {class: 'btn xs', title: 'Informe para enviar', text: 'Informe', onclick: () => { st.infEmp = p.email; st.tab = 'informe'; pintar(); }})),
           el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}),
           el('td', {class: 'n ' + (r.pendientes < 0 ? 'bad' : r.pendientes > 0 ? '' : 'good'), text: fN(r.pendientes)}),
-          el('td', {class: 'n', text: `${fN(r.ld)} de ${fN(r.ldTotal)}`}), el('td', {class: 'n ' + (r.ldPend < 0 ? 'bad' : ''), text: fN(r.ldPend)}), el('td', {class: 'n', text: r.otro ? fN(r.otro) : '—'}), el('td', {class: 'n', text: r.periodos})))),
-        el('tfoot', {}, el('tr', {}, el('td', {text: 'Total'}), el('td', {class: 'n', text: fN(tot.anuales)}), el('td', {class: 'n', text: fN(tot.disfrutados)}), el('td', {class: 'n', text: fN(tot.planificados)}), el('td', {class: 'n', text: fN(tot.pendientes)}), el('td'), el('td'), el('td'), el('td')))))));
+          ld && el('td', {class: 'n', text: `${fN(r.ld)} de ${fN(r.ldTotal)}`}), ld && el('td', {class: 'n ' + (r.ldPend < 0 ? 'bad' : ''), text: fN(r.ldPend)}), el('td', {class: 'n', text: r.otro ? fN(r.otro) : '—'}), el('td', {class: 'n', text: r.periodos})))),
+        el('tfoot', {}, el('tr', {}, el('td', {text: 'Total'}), el('td', {class: 'n', text: fN(tot.anuales)}), el('td', {class: 'n', text: fN(tot.disfrutados)}), el('td', {class: 'n', text: fN(tot.planificados)}), el('td', {class: 'n', text: fN(tot.pendientes)}), ld && el('td'), ld && el('td'), el('td'), el('td')))))));
 }
 
 // ---------- admin: calendario del equipo ----------
@@ -568,8 +573,39 @@ function vistaFestivos() {
 }
 
 // ---------- admin: informe anual ----------
+function informeIndividual(p, r) {
+  const l = deEsteAnio(vacDe(p.email));
+  const generado = new Date().toLocaleDateString('es-ES', {day: 'numeric', month: 'long', year: 'numeric'});
+  const lim = `${st.limite.slice(3)}/${st.limite.slice(0, 2)}/${st.year + 1}`;
+  return el('div', {class: 'card stack rep-ind', id: 'informe'},
+    el('div', {}, el('h1', {text: `Vacaciones ${st.year} · ${p.nombre}`}), el('p', {class: 'muted', text: `${EMPRESA} · informe generado el ${generado}`})),
+    el('div', {class: 'tiles'},
+      tile(`Días que corresponden en ${st.year}`, fN(r.anuales)), tile('Disfrutados', fN(r.disfrutados)), tile('Planificados', fN(r.planificados)),
+      tile('Pendientes', fN(r.pendientes), r.pendientes < 0 ? 'bad' : r.pendientes > 0 ? 'good' : '')),
+    r.ldTotal || r.ld ? el('p', {text: `Libre disposición: ${fN(r.ld)} de ${fN(r.ldTotal)} días usados.`}) : null,
+    r.pendientes > 0 ? el('p', {class: 'small', text: `Los ${fN(r.pendientes)} días pendientes de ${st.year} se pueden disfrutar hasta el ${lim}.`}) : null,
+    el('h3', {text: 'Periodos'}),
+    l.length ? el('table', {},
+      el('thead', {}, el('tr', {}, ['Desde', 'Hasta', 'Días laborables', 'Tipo', 'Estado'].map((h, i) => el('th', {class: i === 2 ? 'n' : '', text: h})))),
+      el('tbody', {}, l.map(v => el('tr', {}, el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}),
+        el('td', {text: v.tipo + (v.medio_dia ? ' (medio día)' : '') + (v.fecha_inicio.slice(0, 4) > String(v.anio) ? ` · días de ${v.anio}` : '')}),
+        el('td', {text: v.fecha_fin < hoyS ? 'Disfrutado' : v.fecha_inicio >= hoyS ? 'Previsto' : 'En curso'})))),
+      el('tfoot', {}, el('tr', {}, el('td', {text: 'Total'}), el('td'), el('td', {class: 'n', text: fN(l.reduce((t, v) => t + diasDe(v), 0))}), el('td'), el('td'))))
+      : el('p', {class: 'muted', text: 'Sin vacaciones apuntadas.'}),
+    el('h3', {text: 'Calendario'}), calendarioAnual(l),
+    el('p', {class: 'small muted', text: 'Se cuentan días laborables: no cuentan los fines de semana, los festivos ni los días libres de empresa.'}));
+}
 function vistaInforme() {
   const rows = filasResumen();
+  const selEmp = el('select', {'aria-label': 'Empleado', onchange: e => { st.infEmp = e.target.value; pintar(); }},
+    el('option', {value: '', text: 'Todos (informe general)'}), rows.map(({p}) => el('option', {value: p.email, selected: st.infEmp === p.email}, p.nombre)));
+  const sel = rows.find(({p}) => p.email === st.infEmp);
+  if (sel) {
+    return el('div', {class: 'stack'},
+      el('div', {class: 'row noprint'}, selEmp, el('button', {class: 'btn primary', text: 'Imprimir o guardar en PDF', onclick: () => window.print()}),
+        el('span', {class: 'small muted', text: 'En la ventana de imprimir elige «Guardar como PDF» y envíaselo.'})),
+      informeIndividual(sel.p, sel.r));
+  }
   const csv = () => {
     const L = [['Empleado', 'Correo', 'Desde', 'Hasta', 'Días laborables', 'Tipo', 'Comentario'].join(';')];
     rows.forEach(({p}) => deEsteAnio(vacDe(p.email)).forEach(v => L.push([p.nombre, p.email, fF(v.fecha_inicio), fF(v.fecha_fin), String(v.dias).replace('.', ','), v.tipo, (v.comentario || '').replace(/[;\n]/g, ' ')].join(';'))));
@@ -578,19 +614,20 @@ function vistaInforme() {
     const blob = new Blob(['﻿' + L.join('\r\n')], {type: 'text/csv;charset=utf-8'});
     const a = el('a', {href: URL.createObjectURL(blob), download: `Vacaciones_${st.year}.csv`}); document.body.append(a); a.click(); a.remove();
   };
+  const ld = hayLD(rows);
   const generado = new Date().toLocaleDateString('es-ES', {day: 'numeric', month: 'long', year: 'numeric'});
   return el('div', {class: 'stack'},
-    el('div', {class: 'row noprint'}, el('button', {class: 'btn primary', text: 'Imprimir o guardar en PDF', onclick: () => window.print()}), el('button', {class: 'btn', text: 'Descargar para Excel (CSV)', onclick: csv}),
+    el('div', {class: 'row noprint'}, selEmp, el('button', {class: 'btn primary', text: 'Imprimir o guardar en PDF', onclick: () => window.print()}), el('button', {class: 'btn', text: 'Descargar para Excel (CSV)', onclick: csv}),
       el('span', {class: 'small muted', text: 'Para el PDF, en la ventana de imprimir elige «Guardar como PDF».'})),
     el('div', {class: 'card stack', id: 'informe'},
       el('div', {}, el('h1', {text: `Informe de vacaciones ${st.year}`}), el('p', {class: 'muted', text: `${EMPRESA} · generado el ${generado}`})),
       el('div', {class: 'tw'}, el('table', {},
-        el('thead', {}, el('tr', {}, ['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', 'Libre disp. usados', 'Libre disp. pendientes', 'Otros'].map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
-        el('tbody', {}, rows.map(({p, r}) => el('tr', {}, el('td', {text: p.nombre}), el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}), el('td', {class: 'n' + (r.pendientes < 0 ? ' bad' : ''), text: fN(r.pendientes)}), el('td', {class: 'n', text: `${fN(r.ld)} de ${fN(r.ldTotal)}`}), el('td', {class: 'n' + (r.ldPend < 0 ? ' bad' : ''), text: fN(r.ldPend)}), el('td', {class: 'n', text: fN(r.otro)})))))),
+        el('thead', {}, el('tr', {}, ['Empleado', 'Vacaciones/año', 'Disfrutados', 'Planificados', 'Pendientes', ld && 'Libre disp. usados', ld && 'Libre disp. pendientes', 'Otros'].filter(Boolean).map((h, i) => el('th', {class: i ? 'n' : '', text: h})))),
+        el('tbody', {}, rows.map(({p, r}) => el('tr', {}, el('td', {text: p.nombre}), el('td', {class: 'n', text: fN(r.anuales)}), el('td', {class: 'n', text: fN(r.disfrutados)}), el('td', {class: 'n', text: fN(r.planificados)}), el('td', {class: 'n' + (r.pendientes < 0 ? ' bad' : ''), text: fN(r.pendientes)}), ld && el('td', {class: 'n', text: `${fN(r.ld)} de ${fN(r.ldTotal)}`}), ld && el('td', {class: 'n' + (r.ldPend < 0 ? ' bad' : ''), text: fN(r.ldPend)}), el('td', {class: 'n', text: fN(r.otro)})))))),
       el('p', {class: 'small muted', text: 'Días laborables (sin fines de semana ni festivos). Disfrutados: hasta ayer; planificados: desde hoy.'}),
       rows.map(({p, r}) => {
         const l = deEsteAnio(vacDe(p.email));
-        return el('div', {class: 'rep-emp'}, el('h3', {text: `${p.nombre} · ${fN(r.disfrutados + r.planificados)} de ${fN(r.anuales)} días de vacaciones · ${fN(r.ld)} de ${fN(r.ldTotal)} de libre disposición`}),
+        return el('div', {class: 'rep-emp'}, el('h3', {text: `${p.nombre} · ${fN(r.disfrutados + r.planificados)} de ${fN(r.anuales)} días de vacaciones${ld ? ` · ${fN(r.ld)} de ${fN(r.ldTotal)} de libre disposición` : ''}`}),
           l.length ? el('table', {}, el('thead', {}, el('tr', {}, ['Desde', 'Hasta', 'Días', 'Tipo', 'Comentario'].map((h, i) => el('th', {class: i === 2 ? 'n' : '', text: h})))),
             el('tbody', {}, l.map(v => el('tr', {}, el('td', {text: fF(v.fecha_inicio)}), el('td', {text: fF(v.fecha_fin)}), el('td', {class: 'n', text: fN(v.dias)}), el('td', {text: v.tipo + (v.medio_dia ? ' (medio día)' : '') + (v.fecha_inicio.slice(0, 4) > String(v.anio) ? ` · disfrutado en ${v.fecha_inicio.slice(0, 4)}` : '')}), el('td', {text: v.comentario || ''})))))
             : el('p', {class: 'small muted', text: 'Sin vacaciones apuntadas.'}));
